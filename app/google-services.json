@@ -7,6 +7,25 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:99267715012:android:6058863996459ea95a8e91",
+        "android_client_info": {
+          "package_name": "com.rahimshop.admin"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC4-ovrrOg9zsf3VhEOPJB_v90dYouRrlg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:99267715012:android:2582e01edfed89155a8e91",
         "android_client_info": {
           "package_name": "com.shopdz.admin"
