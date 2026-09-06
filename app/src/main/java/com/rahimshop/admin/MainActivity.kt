@@ -21,8 +21,37 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // طلب إذن الإشعارات في Android 13+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        // إنشاء WebView
+        webView = WebView(this)
+
+        webView.settings.apply {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            databaseEnabled = true
+            allowFileAccess = false
+            allowContentAccess = false
+        }
+
+        webView.webViewClient = WebViewClient()
+
+        setContentView(webView)
+
+        // فتح لوحة الإدارة
+        webView.loadUrl("https://shop-dz.gt.tc/admin/")
+
+        // طلب إذن الإشعارات
+        requestNotificationPermission()
+
+        // الحصول على Firebase Token
+        getFirebaseToken()
+
+        // إذا فتح التطبيق من إشعار
+        handleNotificationIntent()
+    }
+
+    private fun requestNotificationPermission() {
+
+        if (Build.VERSION.SDK_INT >= 33) {
 
             if (
                 ContextCompat.checkSelfPermission(
@@ -38,25 +67,6 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
-
-        // WebView
-        webView = WebView(this)
-
-        webView.settings.javaScriptEnabled = true
-        webView.settings.domStorageEnabled = true
-        webView.settings.databaseEnabled = true
-
-        webView.webViewClient = WebViewClient()
-
-        setContentView(webView)
-
-        // فتح لوحة الإدارة
-        webView.loadUrl(
-            "https://shop-dz.gt.tc/admin/"
-        )
-
-        // الحصول على FCM Token
-        getFirebaseToken()
     }
 
     private fun getFirebaseToken() {
@@ -71,11 +81,9 @@ class MainActivity : ComponentActivity() {
 
                 val token = task.result
 
-                // إرسال Token إلى السيرفر
-                sendTokenToServer(token)
-
-                // إرسال Token إلى JavaScript
-                sendTokenToWebView(token)
+                if (!token.isNullOrEmpty()) {
+                    sendTokenToServer(token)
+                }
             }
     }
 
@@ -93,18 +101,19 @@ class MainActivity : ComponentActivity() {
                     url.openConnection() as HttpURLConnection
 
                 connection.requestMethod = "POST"
+                connection.connectTimeout = 15000
+                connection.readTimeout = 15000
+                connection.doOutput = true
 
                 connection.setRequestProperty(
                     "Content-Type",
-                    "application/json"
+                    "application/json; charset=UTF-8"
                 )
 
                 connection.setRequestProperty(
                     "Accept",
                     "application/json"
                 )
-
-                connection.doOutput = true
 
                 val json =
                     """
@@ -114,13 +123,13 @@ class MainActivity : ComponentActivity() {
                     }
                     """.trimIndent()
 
-                connection.outputStream.use { output ->
+                connection.outputStream.use { outputStream ->
 
-                    output.write(
-                        json.toByteArray(
-                            Charsets.UTF_8
-                        )
+                    outputStream.write(
+                        json.toByteArray(Charsets.UTF_8)
                     )
+
+                    outputStream.flush()
                 }
 
                 connection.responseCode
@@ -134,31 +143,50 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun sendTokenToWebView(token: String) {
+    private fun handleNotificationIntent() {
 
-        runOnUiThread {
+        val notificationUrl =
+            intent.getStringExtra("notification_url")
 
-            val escapedToken =
-                token
-                    .replace("\\", "\\\\")
-                    .replace("'", "\\'")
+        if (!notificationUrl.isNullOrEmpty()) {
 
-            webView.evaluateJavascript(
-                """
-                window.dispatchEvent(
-                    new CustomEvent(
-                        'SHOP_DZ_FCM_TOKEN',
-                        {
-                            detail: {
-                                token: '$escapedToken',
-                                platform: 'android'
-                            }
-                        }
+            if (notificationUrl.startsWith("https://")) {
+
+                webView.loadUrl(notificationUrl)
+
+            } else if (notificationUrl.startsWith("/")) {
+
+                webView.loadUrl(
+                    "https://shop-dz.gt.tc$notificationUrl"
+                )
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent?) {
+
+        super.onNewIntent(intent)
+
+        if (intent != null) {
+
+            setIntent(intent)
+
+            val notificationUrl =
+                intent.getStringExtra("notification_url")
+
+            if (!notificationUrl.isNullOrEmpty()) {
+
+                if (notificationUrl.startsWith("https://")) {
+
+                    webView.loadUrl(notificationUrl)
+
+                } else if (notificationUrl.startsWith("/")) {
+
+                    webView.loadUrl(
+                        "https://shop-dz.gt.tc$notificationUrl"
                     )
-                );
-                """.trimIndent(),
-                null
-            )
+                }
+            }
         }
     }
 
