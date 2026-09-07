@@ -71,63 +71,57 @@ public class MainActivity extends Activity {
                 });
     }
 
-    private void sendTokenToServer(String token) {
+   private void sendTokenToServer(String token) {
 
-        new Thread(() -> {
+    new Thread(() -> {
 
-            HttpURLConnection connection = null;
+        HttpURLConnection connection = null;
 
-            try {
+        try {
 
-                String encodedToken =
-                        URLEncoder.encode(
-                                token,
-                                "UTF-8"
-                        );
+            String encodedToken =
+                    URLEncoder.encode(token, "UTF-8");
 
-                String urlString =
-                        TOKEN_URL +
-                        "?token=" +
-                        encodedToken;
+            String urlString =
+                    TOKEN_URL +
+                    "?token=" +
+                    encodedToken;
 
-                URL url =
-                        new URL(urlString);
+            URL url = new URL(urlString);
 
-                connection =
-                        (HttpURLConnection)
-                                url.openConnection();
+            connection =
+                    (HttpURLConnection) url.openConnection();
 
-                connection.setRequestMethod("GET");
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(15000);
+            connection.setReadTimeout(15000);
 
-                connection.setConnectTimeout(15000);
-                connection.setReadTimeout(15000);
+            int responseCode =
+                    connection.getResponseCode();
 
-                int responseCode =
-                        connection.getResponseCode();
+            Log.d(
+                    "RahimShopFCM",
+                    "Token upload HTTP: " +
+                            responseCode
+            );
 
-                Log.d(
-                        "RahimShopFCM",
-                        "Token upload HTTP: " +
-                                responseCode
-                );
+            connection.disconnect();
 
+        } catch (Exception e) {
+
+            Log.e(
+                    "RahimShopFCM",
+                    "Token upload failed",
+                    e
+            );
+
+            if (connection != null) {
                 connection.disconnect();
-
-            } catch (Exception e) {
-
-                Log.e(
-                        "RahimShopFCM",
-                        "Token upload failed",
-                        e
-                );
-
-                if (connection != null) {
-                    connection.disconnect();
-                }
             }
+        }
 
-        }).start();
-    }
+    }).start();
+}
 
     @Override
     public void onBackPressed() {
