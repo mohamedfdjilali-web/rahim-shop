@@ -2,23 +2,42 @@ package com.rahimshop.admin;
 
 import android.app.Activity;
 import android.os.Bundle;
-import android.graphics.Color;
-import android.view.Gravity;
-import android.widget.TextView;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
 
 public class MainActivity extends Activity {
+
+    private WebView webView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        TextView textView = new TextView(this);
+        webView = new WebView(this);
 
-        textView.setText("Rahim Shop\n\nالتطبيق يعمل بنجاح ✅");
-        textView.setTextSize(24);
-        textView.setTextColor(Color.BLACK);
-        textView.setGravity(Gravity.CENTER);
+        WebSettings settings = webView.getSettings();
 
-        setContentView(textView);
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setDatabaseEnabled(true);
+
+        webView.setWebViewClient(new WebViewClient());
+
+        setContentView(webView);
+
+        webView.loadUrl(
+            "https://shop-dz.gt.tc/admin/login.php"
+        );
+    }
+
+    @Override
+    public void onBackPressed() {
+
+        if (webView.canGoBack()) {
+            webView.goBack();
+        } else {
+            super.onBackPressed();
+        }
     }
 }
