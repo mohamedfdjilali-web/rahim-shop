@@ -26,18 +26,25 @@ public class MainActivity extends Activity {
     private static final String WEBSITE_URL =
             "https://shop-dz.gt.tc/admin/login.php";
 
-    // Supabase
     private static final String SUPABASE_URL =
             "https://tkntrbjsdxhizebascai.supabase.co";
 
     private static final String SUPABASE_PUBLISHABLE_KEY =
             "sb_publishable_P5ElVLCeoQrLdrbfI7G6Qg_hVR51Evo";
 
+    /*
+     * on_conflict=token
+     *
+     * إذا كان Token موجودًا:
+     * يتم تحديث السجل بدل إنشاء سجل جديد.
+     */
     private static final String SUPABASE_TOKEN_URL =
-            SUPABASE_URL + "/rest/v1/push_tokens";
+            SUPABASE_URL
+                    + "/rest/v1/push_tokens"
+                    + "?on_conflict=token";
 
-    private TextView statusText;
     private WebView webView;
+    private TextView statusText;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -45,26 +52,50 @@ public class MainActivity extends Activity {
 
         createInterface();
 
-        addStatus("تشغيل التطبيق...", false);
+        addStatus(
+                "جاري تشغيل التطبيق...",
+                false
+        );
 
         setupWebView();
 
-        getFirebaseToken();
+        getFCMToken();
     }
+
+    /*
+     * ---------------------------------------------------------
+     * واجهة التطبيق
+     * ---------------------------------------------------------
+     */
 
     private void createInterface() {
 
         LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.WHITE);
+
+        root.setOrientation(
+                LinearLayout.VERTICAL
+        );
+
+        root.setBackgroundColor(
+                Color.WHITE
+        );
 
         statusText = new TextView(this);
 
-        statusText.setText("جاري تشغيل التطبيق...");
+        statusText.setText(
+                "جاري تشغيل التطبيق..."
+        );
+
         statusText.setTextSize(16f);
-        statusText.setTextColor(Color.BLACK);
-        statusText.setTypeface(null, Typeface.BOLD);
-        statusText.setGravity(Gravity.CENTER_VERTICAL);
+
+        statusText.setTypeface(
+                null,
+                Typeface.BOLD
+        );
+
+        statusText.setGravity(
+                Gravity.CENTER_VERTICAL
+        );
 
         statusText.setPadding(
                 dp(12),
@@ -95,31 +126,56 @@ public class MainActivity extends Activity {
         setContentView(root);
     }
 
+    /*
+     * ---------------------------------------------------------
+     * WebView
+     * ---------------------------------------------------------
+     */
+
     private void setupWebView() {
 
-        WebSettings settings = webView.getSettings();
+        WebSettings settings =
+                webView.getSettings();
 
         settings.setJavaScriptEnabled(true);
+
         settings.setDomStorageEnabled(true);
+
         settings.setDatabaseEnabled(true);
+
         settings.setLoadWithOverviewMode(true);
+
         settings.setUseWideViewPort(true);
 
-        webView.setWebViewClient(new WebViewClient());
+        webView.setWebViewClient(
+                new WebViewClient()
+        );
 
-        addStatus("جاري فتح الموقع...", false);
+        addStatus(
+                "جاري فتح SHOP-DZ...",
+                false
+        );
 
-        webView.loadUrl(WEBSITE_URL);
+        webView.loadUrl(
+                WEBSITE_URL
+        );
     }
 
-    private void getFirebaseToken() {
+    /*
+     * ---------------------------------------------------------
+     * الحصول على FCM Token
+     * ---------------------------------------------------------
+     */
+
+    private void getFCMToken() {
 
         addStatus(
                 "جاري الحصول على FCM Token...",
                 false
         );
 
-        FirebaseMessaging.getInstance()
+        FirebaseMessaging
+                .getInstance()
                 .getToken()
                 .addOnCompleteListener(task -> {
 
@@ -135,9 +191,11 @@ public class MainActivity extends Activity {
                         return;
                     }
 
-                    String token = task.getResult();
+                    String token =
+                            task.getResult();
 
-                    if (token == null || token.trim().isEmpty()) {
+                    if (token == null
+                            || token.trim().isEmpty()) {
 
                         addStatus(
                                 "❌ FCM Token فارغ",
@@ -156,11 +214,21 @@ public class MainActivity extends Activity {
                             false
                     );
 
-                    sendTokenToSupabase(token);
+                    sendTokenToSupabase(
+                            token
+                    );
                 });
     }
 
-    private void sendTokenToSupabase(String token) {
+    /*
+     * ---------------------------------------------------------
+     * إرسال / تحديث Token في Supabase
+     * ---------------------------------------------------------
+     */
+
+    private void sendTokenToSupabase(
+            String token
+    ) {
 
         new Thread(() -> {
 
@@ -176,29 +244,52 @@ public class MainActivity extends Activity {
                 );
 
                 URL url =
-                        new URL(SUPABASE_TOKEN_URL);
+                        new URL(
+                                SUPABASE_TOKEN_URL
+                        );
 
                 connection =
-                        (HttpURLConnection) url.openConnection();
+                        (HttpURLConnection)
+                                url.openConnection();
 
-                connection.setRequestMethod("POST");
+                /*
+                 * POST + Upsert
+                 */
+                connection.setRequestMethod(
+                        "POST"
+                );
 
-                connection.setConnectTimeout(15000);
+                connection.setConnectTimeout(
+                        15000
+                );
 
-                connection.setReadTimeout(15000);
+                connection.setReadTimeout(
+                        15000
+                );
 
-                connection.setUseCaches(false);
+                connection.setUseCaches(
+                        false
+                );
 
-                connection.setDoInput(true);
+                connection.setDoInput(
+                        true
+                );
 
-                connection.setDoOutput(true);
+                connection.setDoOutput(
+                        true
+                );
 
-                // Supabase Publishable Key
+                /*
+                 * Supabase Publishable Key
+                 */
                 connection.setRequestProperty(
                         "apikey",
                         SUPABASE_PUBLISHABLE_KEY
                 );
 
+                /*
+                 * JSON
+                 */
                 connection.setRequestProperty(
                         "Content-Type",
                         "application/json"
@@ -207,6 +298,20 @@ public class MainActivity extends Activity {
                 connection.setRequestProperty(
                         "Accept",
                         "application/json"
+                );
+
+                /*
+                 * Upsert:
+                 *
+                 * إذا كان token موجودًا
+                 * يتم دمج/تحديث السجل.
+                 *
+                 * return=minimal
+                 * حتى لا نحتاج SELECT policy.
+                 */
+                connection.setRequestProperty(
+                        "Prefer",
+                        "resolution=merge-duplicates,return=minimal"
                 );
 
                 String json =
@@ -229,6 +334,9 @@ public class MainActivity extends Activity {
 
                 outputStream.close();
 
+                /*
+                 * قراءة HTTP Code
+                 */
                 int responseCode =
                         connection.getResponseCode();
 
@@ -247,22 +355,26 @@ public class MainActivity extends Activity {
                 }
 
                 String serverResponse =
-                        readStream(inputStream);
+                        readStream(
+                                inputStream
+                        );
 
-                String result =
-                        "📡 نتيجة Supabase\n\n"
-                                + "HTTP Code: "
-                                + responseCode
-                                + "\n\n"
-                                + "Server Response:\n"
-                                + serverResponse;
-
+                /*
+                 * نجاح
+                 */
                 if (responseCode >= 200
                         && responseCode < 300) {
 
                     addStatus(
-                            "✅ تم حفظ FCM Token في Supabase بنجاح\n\n"
-                                    + result,
+                            "✅ تم حفظ FCM Token بنجاح\n\n"
+                                    + "Supabase HTTP Code: "
+                                    + responseCode
+                                    + "\n\n"
+                                    + "Token length: "
+                                    + token.length()
+                                    + "\n\n"
+                                    + "إذا كان Token موجودًا مسبقًا،"
+                                    + "\nتم تحديثه بدل إنشاء نسخة جديدة.",
                             false
                     );
 
@@ -270,7 +382,11 @@ public class MainActivity extends Activity {
 
                     addStatus(
                             "❌ Supabase رفض الطلب\n\n"
-                                    + result,
+                                    + "HTTP Code: "
+                                    + responseCode
+                                    + "\n\n"
+                                    + "Server Response:\n"
+                                    + serverResponse,
                             true
                     );
                 }
@@ -278,8 +394,9 @@ public class MainActivity extends Activity {
             } catch (Exception e) {
 
                 addStatus(
-                        "❌ خطأ أثناء الاتصال بـ Supabase\n\n"
-                                + e.getClass().getSimpleName()
+                        "❌ خطأ في الاتصال بـ Supabase\n\n"
+                                + e.getClass()
+                                .getSimpleName()
                                 + "\n\n"
                                 + e.getMessage(),
                         true
@@ -296,21 +413,52 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    private String escapeJson(String value) {
+    /*
+     * ---------------------------------------------------------
+     * حماية JSON
+     * ---------------------------------------------------------
+     */
+
+    private String escapeJson(
+            String value
+    ) {
 
         if (value == null) {
             return "";
         }
 
         return value
-                .replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
+                .replace(
+                        "\\",
+                        "\\\\"
+                )
+                .replace(
+                        "\"",
+                        "\\\""
+                )
+                .replace(
+                        "\n",
+                        "\\n"
+                )
+                .replace(
+                        "\r",
+                        "\\r"
+                )
+                .replace(
+                        "\t",
+                        "\\t"
+                );
     }
 
-    private String readStream(InputStream inputStream) {
+    /*
+     * ---------------------------------------------------------
+     * قراءة رد السيرفر
+     * ---------------------------------------------------------
+     */
+
+    private String readStream(
+            InputStream inputStream
+    ) {
 
         if (inputStream == null) {
 
@@ -332,9 +480,13 @@ public class MainActivity extends Activity {
 
             String line;
 
-            while ((line = reader.readLine()) != null) {
+            while (
+                    (line = reader.readLine())
+                            != null
+            ) {
 
                 result.append(line);
+
                 result.append("\n");
             }
 
@@ -346,8 +498,16 @@ public class MainActivity extends Activity {
                     + e.getMessage();
         }
 
-        return result.toString().trim();
+        return result
+                .toString()
+                .trim();
     }
+
+    /*
+     * ---------------------------------------------------------
+     * تحديث حالة التطبيق
+     * ---------------------------------------------------------
+     */
 
     private void addStatus(
             String message,
@@ -360,24 +520,42 @@ public class MainActivity extends Activity {
                 return;
             }
 
-            statusText.setText(message);
+            statusText.setText(
+                    message
+            );
 
             if (error) {
 
                 statusText.setTextColor(
-                        Color.rgb(180, 0, 0)
+                        Color.rgb(
+                                180,
+                                0,
+                                0
+                        )
                 );
 
             } else {
 
                 statusText.setTextColor(
-                        Color.rgb(0, 100, 50)
+                        Color.rgb(
+                                0,
+                                100,
+                                50
+                        )
                 );
             }
         });
     }
 
-    private int dp(int value) {
+    /*
+     * ---------------------------------------------------------
+     * تحويل dp
+     * ---------------------------------------------------------
+     */
+
+    private int dp(
+            int value
+    ) {
 
         float density =
                 getResources()
@@ -385,8 +563,17 @@ public class MainActivity extends Activity {
                         .density;
 
         return (int)
-                (value * density + 0.5f);
+                (
+                        value * density
+                                + 0.5f
+                );
     }
+
+    /*
+     * ---------------------------------------------------------
+     * زر الرجوع
+     * ---------------------------------------------------------
+     */
 
     @Override
     public void onBackPressed() {
