@@ -286,6 +286,10 @@ public class MainActivity extends Activity {
                         "apikey",
                         SUPABASE_PUBLISHABLE_KEY
                 );
+                connection.setRequestProperty(
+                        "Authorization",
+                     "Bearer " + SUPABASE_PUBLISHABLE_KEY
+                );
 
                 /*
                  * JSON
