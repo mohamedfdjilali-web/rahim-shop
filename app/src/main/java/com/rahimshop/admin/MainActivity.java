@@ -27,7 +27,7 @@ public class MainActivity extends Activity {
             "https://shop-dz.gt.tc/admin/login.php";
 
     private static final String TOKEN_URL =
-            "https://shop-dz.gt.tc/admin/save_push_token_get.php";
+        "https://shop-dz.gt.tc/admin/mobile_test.php";
 
     private TextView statusText;
     private WebView webView;
