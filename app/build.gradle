@@ -1,6 +1,5 @@
 plugins {
     id 'com.android.application'
-    id 'com.google.gms.google-services'
 }
 
 android {
@@ -11,22 +10,11 @@ android {
         applicationId "com.rahimshop.admin"
         minSdk 23
         targetSdk 35
-        versionCode 1
-        versionName "1.0"
+        versionCode 2
+        versionName "1.1"
     }
 }
 
 dependencies {
-
-    implementation 'androidx.appcompat:appcompat:1.7.0'
-
-    implementation 'com.google.android.material:material:1.12.0'
-
     implementation 'androidx.webkit:webkit:1.12.1'
-
-    implementation platform(
-        'com.google.firebase:firebase-bom:33.7.0'
-    )
-
-    implementation 'com.google.firebase:firebase-messaging'
 }
