@@ -8,14 +8,16 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import java.net.HttpURLConnection
+import java.net.URL
 
 class ShopFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
 
-        // سيتم إرسال Token إلى السيرفر من MainActivity
-        // عند تشغيل التطبيق.
+        // إرسال الـ FCM Token الجديد إلى السيرفر
+        sendTokenToServer(token)
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
@@ -35,7 +37,90 @@ class ShopFirebaseMessagingService : FirebaseMessagingService() {
             message.data["url"]
                 ?: "/admin/"
 
-        showNotification(title, body, url)
+        showNotification(
+            title,
+            body,
+            url
+        )
+    }
+
+    private fun sendTokenToServer(token: String) {
+
+        Thread {
+
+            var connection: HttpURLConnection? = null
+
+            try {
+
+                val url = URL(
+                    "https://shop-dz.gt.tc/admin/save_push_token.php"
+                )
+
+                connection =
+                    url.openConnection()
+                        as HttpURLConnection
+
+                connection.requestMethod = "POST"
+                connection.connectTimeout = 15000
+                connection.readTimeout = 15000
+                connection.doOutput = true
+
+                connection.setRequestProperty(
+                    "Content-Type",
+                    "application/json; charset=UTF-8"
+                )
+
+                connection.setRequestProperty(
+                    "Accept",
+                    "application/json"
+                )
+
+                val escapedToken =
+                    token
+                        .replace("\\", "\\\\")
+                        .replace("\"", "\\\"")
+
+                val json =
+                    """
+                    {
+                        "token": "$escapedToken",
+                        "platform": "android"
+                    }
+                    """.trimIndent()
+
+                connection.outputStream.use { output ->
+
+                    output.write(
+                        json.toByteArray(
+                            Charsets.UTF_8
+                        )
+                    )
+
+                    output.flush()
+                }
+
+                val responseCode =
+                    connection.responseCode
+
+                android.util.Log.d(
+                    "SHOP_DZ_FCM",
+                    "Token upload response: $responseCode"
+                )
+
+                connection.disconnect()
+
+            } catch (e: Exception) {
+
+                android.util.Log.e(
+                    "SHOP_DZ_FCM",
+                    "Token upload failed",
+                    e
+                )
+
+                connection?.disconnect()
+            }
+
+        }.start()
     }
 
     private fun showNotification(
@@ -46,24 +131,33 @@ class ShopFirebaseMessagingService : FirebaseMessagingService() {
 
         val channelId = "shop_dz_orders"
 
-        val intent = Intent(this, MainActivity::class.java)
+        val intent =
+            Intent(
+                this,
+                MainActivity::class.java
+            )
 
-        intent.putExtra("notification_url", url)
+        intent.putExtra(
+            "notification_url",
+            url
+        )
 
         intent.flags =
             Intent.FLAG_ACTIVITY_NEW_TASK or
             Intent.FLAG_ACTIVITY_CLEAR_TOP
 
-        val pendingIntent = PendingIntent.getActivity(
-            this,
-            100,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
-                    PendingIntent.FLAG_IMMUTABLE
-                else
-                    0
-        )
+        val pendingIntent =
+            PendingIntent.getActivity(
+                this,
+                100,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        PendingIntent.FLAG_IMMUTABLE
+                    } else {
+                        0
+                    }
+            )
 
         val notificationManager =
             getSystemService(
@@ -72,11 +166,12 @@ class ShopFirebaseMessagingService : FirebaseMessagingService() {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
 
-            val channel = NotificationChannel(
-                channelId,
-                "SHOP-DZ Orders",
-                NotificationManager.IMPORTANCE_HIGH
-            )
+            val channel =
+                NotificationChannel(
+                    channelId,
+                    "SHOP-DZ Orders",
+                    NotificationManager.IMPORTANCE_HIGH
+                )
 
             channel.description =
                 "إشعارات الطلبات الجديدة"
