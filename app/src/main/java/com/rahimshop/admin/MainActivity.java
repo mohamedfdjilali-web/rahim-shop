@@ -19,7 +19,7 @@ public class MainActivity extends Activity {
     private TextView status;
 
     private static final String TOKEN_URL =
-            "https://shop-dz.gt.tc/admin/save_push_token.php";
+        "https://shop-dz.gt.tc/admin/test_post.php";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
