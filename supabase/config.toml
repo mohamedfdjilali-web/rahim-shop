@@ -1,2 +1,2 @@
-[functions.send-order-notification]
+[functions.bright-worker]
 verify_jwt = false
