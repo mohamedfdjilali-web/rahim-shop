@@ -2,41 +2,41 @@ package com.rahimshop.admin;
 
 import android.app.Activity;
 import android.os.Bundle;
-import android.graphics.Color;
-import android.view.Gravity;
-import android.widget.TextView;
+import android.util.Log;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
 
 import com.google.firebase.messaging.FirebaseMessaging;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 
 public class MainActivity extends Activity {
 
-    private TextView status;
+    private WebView webView;
 
     private static final String TOKEN_URL =
-        "https://shop-dz.gt.tc/admin/test_post.php";
+            "https://shop-dz.gt.tc/admin/save_push_token_get.php";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        status = new TextView(this);
+        webView = new WebView(this);
 
-        status.setTextSize(18);
-        status.setTextColor(Color.BLACK);
-        status.setGravity(Gravity.CENTER);
-        status.setPadding(30, 30, 30, 30);
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setDatabaseEnabled(true);
 
-        setContentView(status);
+        webView.setWebViewClient(new WebViewClient());
 
-        status.setText(
-                "Rahim Shop\n\n" +
-                "جاري الحصول على FCM Token..."
+        setContentView(webView);
+
+        webView.loadUrl(
+                "https://shop-dz.gt.tc/admin/login.php"
         );
 
         getFCMToken();
@@ -50,9 +50,10 @@ public class MainActivity extends Activity {
 
                     if (!task.isSuccessful()) {
 
-                        status.setText(
-                                "Firebase Token ERROR\n\n" +
-                                String.valueOf(task.getException())
+                        Log.e(
+                                "RahimShopFCM",
+                                "FCM Token failed",
+                                task.getException()
                         );
 
                         return;
@@ -60,20 +61,10 @@ public class MainActivity extends Activity {
 
                     String token = task.getResult();
 
-                    if (token == null || token.isEmpty()) {
-
-                        status.setText(
-                                "Firebase أعاد Token فارغ"
-                        );
-
-                        return;
-                    }
-
-                    status.setText(
-                            "FCM Token تم الحصول عليه ✅\n\n" +
-                            "طول Token: " +
-                            token.length() +
-                            "\n\nجاري الإرسال للسيرفر..."
+                    Log.d(
+                            "RahimShopFCM",
+                            "FCM TOKEN length: " +
+                                    token.length()
                     );
 
                     sendTokenToServer(token);
@@ -88,100 +79,47 @@ public class MainActivity extends Activity {
 
             try {
 
-                URL url = new URL(TOKEN_URL);
+                String encodedToken =
+                        URLEncoder.encode(
+                                token,
+                                "UTF-8"
+                        );
+
+                String urlString =
+                        TOKEN_URL +
+                        "?token=" +
+                        encodedToken;
+
+                URL url =
+                        new URL(urlString);
 
                 connection =
-                        (HttpURLConnection) url.openConnection();
+                        (HttpURLConnection)
+                                url.openConnection();
 
-                connection.setRequestMethod("POST");
+                connection.setRequestMethod("GET");
+
                 connection.setConnectTimeout(15000);
                 connection.setReadTimeout(15000);
-                connection.setDoOutput(true);
 
-                connection.setRequestProperty(
-                        "Content-Type",
-                        "application/json; charset=UTF-8"
-                );
-
-                connection.setRequestProperty(
-                        "Accept",
-                        "application/json"
-                );
-
-                String json =
-                        "{"
-                        + "\"token\":\""
-                        + token
-                        .replace("\\", "\\\\")
-                        .replace("\"", "\\\"")
-                        + "\","
-                        + "\"platform\":\"android\""
-                        + "}";
-
-                OutputStream output =
-                        connection.getOutputStream();
-
-                output.write(
-                        json.getBytes("UTF-8")
-                );
-
-                output.flush();
-                output.close();
-
-                int code =
+                int responseCode =
                         connection.getResponseCode();
 
-                BufferedReader reader;
-
-                if (code >= 200 && code < 400) {
-
-                    reader =
-                            new BufferedReader(
-                                    new InputStreamReader(
-                                            connection.getInputStream()
-                                    )
-                            );
-
-                } else {
-
-                    reader =
-                            new BufferedReader(
-                                    new InputStreamReader(
-                                            connection.getErrorStream()
-                                    )
-                            );
-                }
-
-                StringBuilder response =
-                        new StringBuilder();
-
-                String line;
-
-                while ((line = reader.readLine()) != null) {
-                    response.append(line);
-                }
-
-                reader.close();
-
-                String result =
-                        "HTTP: " + code +
-                        "\n\n" +
-                        response.toString();
-
-                runOnUiThread(() ->
-                        status.setText(result)
+                Log.d(
+                        "RahimShopFCM",
+                        "Token upload HTTP: " +
+                                responseCode
                 );
+
+                connection.disconnect();
 
             } catch (Exception e) {
 
-                runOnUiThread(() ->
-                        status.setText(
-                                "خطأ في الاتصال بالسيرفر:\n\n" +
-                                e.toString()
-                        )
+                Log.e(
+                        "RahimShopFCM",
+                        "Token upload failed",
+                        e
                 );
-
-            } finally {
 
                 if (connection != null) {
                     connection.disconnect();
@@ -189,5 +127,18 @@ public class MainActivity extends Activity {
             }
 
         }).start();
+    }
+
+    @Override
+    public void onBackPressed() {
+
+        if (webView.canGoBack()) {
+
+            webView.goBack();
+
+        } else {
+
+            super.onBackPressed();
+        }
     }
 }
