@@ -2,10 +2,9 @@ package com.rahimshop.admin;
 
 import android.app.Activity;
 import android.os.Bundle;
-import android.util.Log;
-import android.webkit.WebSettings;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
+import android.graphics.Color;
+import android.view.Gravity;
+import android.widget.TextView;
 
 import com.google.firebase.messaging.FirebaseMessaging;
 
@@ -17,9 +16,7 @@ import java.net.URL;
 
 public class MainActivity extends Activity {
 
-    private WebView webView;
-
-    private static final String TAG = "RahimShopFCM";
+    private TextView status;
 
     private static final String TOKEN_URL =
             "https://shop-dz.gt.tc/admin/save_push_token.php";
@@ -28,20 +25,18 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        webView = new WebView(this);
+        status = new TextView(this);
 
-        WebSettings settings = webView.getSettings();
+        status.setTextSize(18);
+        status.setTextColor(Color.BLACK);
+        status.setGravity(Gravity.CENTER);
+        status.setPadding(30, 30, 30, 30);
 
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        settings.setDatabaseEnabled(true);
+        setContentView(status);
 
-        webView.setWebViewClient(new WebViewClient());
-
-        setContentView(webView);
-
-        webView.loadUrl(
-                "https://shop-dz.gt.tc/admin/login.php"
+        status.setText(
+                "Rahim Shop\n\n" +
+                "جاري الحصول على FCM Token..."
         );
 
         getFCMToken();
@@ -55,10 +50,9 @@ public class MainActivity extends Activity {
 
                     if (!task.isSuccessful()) {
 
-                        Log.e(
-                                TAG,
-                                "FCM Token failed",
-                                task.getException()
+                        status.setText(
+                                "Firebase Token ERROR\n\n" +
+                                String.valueOf(task.getException())
                         );
 
                         return;
@@ -68,22 +62,18 @@ public class MainActivity extends Activity {
 
                     if (token == null || token.isEmpty()) {
 
-                        Log.e(
-                                TAG,
-                                "FCM Token is empty"
+                        status.setText(
+                                "Firebase أعاد Token فارغ"
                         );
 
                         return;
                     }
 
-                    Log.d(
-                            TAG,
-                            "FCM TOKEN RECEIVED"
-                    );
-
-                    Log.d(
-                            TAG,
-                            "Token length: " + token.length()
+                    status.setText(
+                            "FCM Token تم الحصول عليه ✅\n\n" +
+                            "طول Token: " +
+                            token.length() +
+                            "\n\nجاري الإرسال للسيرفر..."
                     );
 
                     sendTokenToServer(token);
@@ -104,10 +94,8 @@ public class MainActivity extends Activity {
                         (HttpURLConnection) url.openConnection();
 
                 connection.setRequestMethod("POST");
-
                 connection.setConnectTimeout(15000);
                 connection.setReadTimeout(15000);
-
                 connection.setDoOutput(true);
 
                 connection.setRequestProperty(
@@ -120,23 +108,15 @@ public class MainActivity extends Activity {
                         "application/json"
                 );
 
-                String escapedToken =
-                        token
-                                .replace("\\", "\\\\")
-                                .replace("\"", "\\\"");
-
                 String json =
                         "{"
-                                + "\"token\":\""
-                                + escapedToken
-                                + "\","
-                                + "\"platform\":\"android\""
-                                + "}";
-
-                Log.d(
-                        TAG,
-                        "Sending token to server..."
-                );
+                        + "\"token\":\""
+                        + token
+                        .replace("\\", "\\\\")
+                        .replace("\"", "\\\"")
+                        + "\","
+                        + "\"platform\":\"android\""
+                        + "}";
 
                 OutputStream output =
                         connection.getOutputStream();
@@ -148,18 +128,12 @@ public class MainActivity extends Activity {
                 output.flush();
                 output.close();
 
-                int responseCode =
+                int code =
                         connection.getResponseCode();
-
-                Log.d(
-                        TAG,
-                        "HTTP response: " + responseCode
-                );
 
                 BufferedReader reader;
 
-                if (responseCode >= 200 &&
-                        responseCode < 400) {
+                if (code >= 200 && code < 400) {
 
                     reader =
                             new BufferedReader(
@@ -189,18 +163,22 @@ public class MainActivity extends Activity {
 
                 reader.close();
 
-                Log.d(
-                        TAG,
-                        "Server response: "
-                                + response
+                String result =
+                        "HTTP: " + code +
+                        "\n\n" +
+                        response.toString();
+
+                runOnUiThread(() ->
+                        status.setText(result)
                 );
 
             } catch (Exception e) {
 
-                Log.e(
-                        TAG,
-                        "Token upload failed",
-                        e
+                runOnUiThread(() ->
+                        status.setText(
+                                "خطأ في الاتصال بالسيرفر:\n\n" +
+                                e.toString()
+                        )
                 );
 
             } finally {
@@ -211,15 +189,5 @@ public class MainActivity extends Activity {
             }
 
         }).start();
-    }
-
-    @Override
-    public void onBackPressed() {
-
-        if (webView.canGoBack()) {
-            webView.goBack();
-        } else {
-            super.onBackPressed();
-        }
     }
 }
