@@ -17,17 +17,24 @@ import com.google.firebase.messaging.FirebaseMessaging;
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.net.URLEncoder;
 
 public class MainActivity extends Activity {
 
     private static final String WEBSITE_URL =
             "https://shop-dz.gt.tc/admin/login.php";
 
-    private static final String TOKEN_URL =
-        "https://shop-dz.gt.tc/admin/mobile_test.php";
+    // Supabase
+    private static final String SUPABASE_URL =
+            "https://tkntrbjsdxhizebascai.supabase.co";
+
+    private static final String SUPABASE_PUBLISHABLE_KEY =
+            "sb_publishable_P5ElVLCeoQrLdrbfI7G6Qg_hVR51Evo";
+
+    private static final String SUPABASE_TOKEN_URL =
+            SUPABASE_URL + "/rest/v1/push_tokens";
 
     private TextView statusText;
     private WebView webView;
@@ -51,7 +58,6 @@ public class MainActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(Color.WHITE);
 
-        // عنوان الحالة
         statusText = new TextView(this);
 
         statusText.setText("جاري تشغيل التطبيق...");
@@ -60,13 +66,11 @@ public class MainActivity extends Activity {
         statusText.setTypeface(null, Typeface.BOLD);
         statusText.setGravity(Gravity.CENTER_VERTICAL);
 
-        int padding = dp(12);
-
         statusText.setPadding(
                 dp(12),
-                padding,
                 dp(12),
-                padding
+                dp(12),
+                dp(12)
         );
 
         root.addView(
@@ -77,7 +81,6 @@ public class MainActivity extends Activity {
                 )
         );
 
-        // WebView
         webView = new WebView(this);
 
         root.addView(
@@ -124,7 +127,7 @@ public class MainActivity extends Activity {
 
                         addStatus(
                                 "❌ فشل الحصول على FCM Token\n\n"
-                                        + "الخطأ: "
+                                        + "الخطأ:\n"
                                         + task.getException(),
                                 true
                         );
@@ -144,22 +147,20 @@ public class MainActivity extends Activity {
                         return;
                     }
 
-                    final String finalToken = token;
-
                     addStatus(
                             "✅ تم الحصول على FCM Token\n\n"
                                     + "طول Token = "
-                                    + finalToken.length()
+                                    + token.length()
                                     + "\n\n"
-                                    + "جاري الإرسال إلى السيرفر...",
+                                    + "جاري الإرسال إلى Supabase...",
                             false
                     );
 
-                    sendTokenToServer(finalToken);
+                    sendTokenToSupabase(token);
                 });
     }
 
-    private void sendTokenToServer(String token) {
+    private void sendTokenToSupabase(String token) {
 
         new Thread(() -> {
 
@@ -167,30 +168,20 @@ public class MainActivity extends Activity {
 
             try {
 
-                String encodedToken =
-                        URLEncoder.encode(
-                                token,
-                                "UTF-8"
-                        );
-
-                String urlString =
-                        TOKEN_URL
-                                + "?token="
-                                + encodedToken;
-
                 addStatus(
-                        "📡 جاري الاتصال بالسيرفر...\n\n"
+                        "📡 جاري الاتصال بـ Supabase...\n\n"
                                 + "Token length = "
                                 + token.length(),
                         false
                 );
 
-                URL url = new URL(urlString);
+                URL url =
+                        new URL(SUPABASE_TOKEN_URL);
 
                 connection =
                         (HttpURLConnection) url.openConnection();
 
-                connection.setRequestMethod("GET");
+                connection.setRequestMethod("POST");
 
                 connection.setConnectTimeout(15000);
 
@@ -199,6 +190,44 @@ public class MainActivity extends Activity {
                 connection.setUseCaches(false);
 
                 connection.setDoInput(true);
+
+                connection.setDoOutput(true);
+
+                // Supabase Publishable Key
+                connection.setRequestProperty(
+                        "apikey",
+                        SUPABASE_PUBLISHABLE_KEY
+                );
+
+                connection.setRequestProperty(
+                        "Content-Type",
+                        "application/json"
+                );
+
+                connection.setRequestProperty(
+                        "Accept",
+                        "application/json"
+                );
+
+                String json =
+                        "{"
+                                + "\"token\":\""
+                                + escapeJson(token)
+                                + "\","
+                                + "\"platform\":\"android\","
+                                + "\"is_active\":true"
+                                + "}";
+
+                OutputStream outputStream =
+                        connection.getOutputStream();
+
+                outputStream.write(
+                        json.getBytes("UTF-8")
+                );
+
+                outputStream.flush();
+
+                outputStream.close();
 
                 int responseCode =
                         connection.getResponseCode();
@@ -221,7 +250,7 @@ public class MainActivity extends Activity {
                         readStream(inputStream);
 
                 String result =
-                        "📡 نتيجة إرسال FCM Token\n\n"
+                        "📡 نتيجة Supabase\n\n"
                                 + "HTTP Code: "
                                 + responseCode
                                 + "\n\n"
@@ -232,7 +261,7 @@ public class MainActivity extends Activity {
                         && responseCode < 300) {
 
                     addStatus(
-                            "✅ تم إرسال FCM Token بنجاح\n\n"
+                            "✅ تم حفظ FCM Token في Supabase بنجاح\n\n"
                                     + result,
                             false
                     );
@@ -240,7 +269,7 @@ public class MainActivity extends Activity {
                 } else {
 
                     addStatus(
-                            "❌ السيرفر رفض الطلب\n\n"
+                            "❌ Supabase رفض الطلب\n\n"
                                     + result,
                             true
                     );
@@ -249,7 +278,7 @@ public class MainActivity extends Activity {
             } catch (Exception e) {
 
                 addStatus(
-                        "❌ خطأ أثناء إرسال Token\n\n"
+                        "❌ خطأ أثناء الاتصال بـ Supabase\n\n"
                                 + e.getClass().getSimpleName()
                                 + "\n\n"
                                 + e.getMessage(),
@@ -267,6 +296,20 @@ public class MainActivity extends Activity {
         }).start();
     }
 
+    private String escapeJson(String value) {
+
+        if (value == null) {
+            return "";
+        }
+
+        return value
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t");
+    }
+
     private String readStream(InputStream inputStream) {
 
         if (inputStream == null) {
@@ -282,7 +325,8 @@ public class MainActivity extends Activity {
             BufferedReader reader =
                     new BufferedReader(
                             new InputStreamReader(
-                                    inputStream
+                                    inputStream,
+                                    "UTF-8"
                             )
                     );
 
