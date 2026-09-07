@@ -1,4 +1,3 @@
-```java
 package com.rahimshop.admin;
 
 import android.app.Activity;
@@ -185,7 +184,6 @@ public class MainActivity extends Activity {
                 String line;
 
                 while ((line = reader.readLine()) != null) {
-
                     response.append(line);
                 }
 
@@ -219,13 +217,9 @@ public class MainActivity extends Activity {
     public void onBackPressed() {
 
         if (webView.canGoBack()) {
-
             webView.goBack();
-
         } else {
-
             super.onBackPressed();
         }
     }
 }
-```
