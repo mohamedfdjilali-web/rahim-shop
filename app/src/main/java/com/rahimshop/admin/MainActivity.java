@@ -5,6 +5,7 @@ import android.os.Bundle;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.WebChromeClient;
 
 import com.google.firebase.messaging.FirebaseMessaging;
 
@@ -60,49 +61,36 @@ public class MainActivity extends Activity {
 
     private void setupWebView() {
 
-        WebSettings settings =
-                webView.getSettings();
+    WebSettings settings =
+            webView.getSettings();
 
-        settings.setJavaScriptEnabled(true);
+    settings.setJavaScriptEnabled(true);
+    settings.setDomStorageEnabled(true);
+    settings.setDatabaseEnabled(true);
 
-        settings.setDomStorageEnabled(true);
+    settings.setLoadWithOverviewMode(true);
+    settings.setUseWideViewPort(true);
 
-        settings.setDatabaseEnabled(true);
+    settings.setJavaScriptCanOpenWindowsAutomatically(true);
+    settings.setSupportMultipleWindows(false);
 
-        settings.setLoadWithOverviewMode(true);
+    webView.setWebViewClient(
+            new WebViewClient()
+    );
 
-        settings.setUseWideViewPort(true);
+    webView.setWebChromeClient(
+            new WebChromeClient()
+    );
 
-        /*
-         * السماح بالكوكيز مهم لتسجيل الدخول
-         * وحفظ جلسة الإدارة.
-         */
-        android.webkit.CookieManager
-                .getInstance()
-                .setAcceptCookie(true);
+    addStatus(
+            "جاري فتح SHOP-DZ...",
+            false
+    );
 
-        android.webkit.CookieManager
-                .getInstance()
-                .setAcceptThirdPartyCookies(
-                        webView,
-                        true
-                );
-
-        /*
-         * إبقاء الروابط داخل WebView.
-         */
-        webView.setWebViewClient(
-                new WebViewClient()
-        );
-
-        /*
-         * فتح الموقع.
-         */
-        webView.loadUrl(
-                WEBSITE_URL
-        );
-    }
-
+    webView.loadUrl(
+            WEBSITE_URL
+    );
+}
     /*
      * ---------------------------------------------------------
      * FCM TOKEN
