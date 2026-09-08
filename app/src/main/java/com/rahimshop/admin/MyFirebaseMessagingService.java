@@ -1,3 +1,4 @@
+```java
 package com.rahimshop.admin;
 
 import android.app.NotificationChannel;
@@ -32,7 +33,8 @@ public class MyFirebaseMessagingService
                 "FCM message received"
         );
 
-        String title = "طلب جديد";
+        String title =
+                "🔔 طلب جديد";
 
         String body =
                 "لديك طلب جديد في SHOP-DZ";
@@ -42,24 +44,26 @@ public class MyFirebaseMessagingService
          */
         if (remoteMessage.getNotification() != null) {
 
-            if (remoteMessage
-                    .getNotification()
-                    .getTitle() != null) {
+            String notificationTitle =
+                    remoteMessage
+                            .getNotification()
+                            .getTitle();
 
-                title =
-                        remoteMessage
-                                .getNotification()
-                                .getTitle();
+            String notificationBody =
+                    remoteMessage
+                            .getNotification()
+                            .getBody();
+
+            if (notificationTitle != null
+                    && !notificationTitle.isEmpty()) {
+
+                title = notificationTitle;
             }
 
-            if (remoteMessage
-                    .getNotification()
-                    .getBody() != null) {
+            if (notificationBody != null
+                    && !notificationBody.isEmpty()) {
 
-                body =
-                        remoteMessage
-                                .getNotification()
-                                .getBody();
+                body = notificationBody;
             }
         }
 
@@ -106,6 +110,9 @@ public class MyFirebaseMessagingService
 
         createNotificationChannel();
 
+        /*
+         * فتح MainActivity عند الضغط على الإشعار
+         */
         Intent intent =
                 new Intent(
                         this,
@@ -125,32 +132,50 @@ public class MyFirebaseMessagingService
                                 | PendingIntent.FLAG_IMMUTABLE
                 );
 
+        /*
+         * إنشاء الإشعار
+         *
+         * مهم:
+         * ic_notification هو رمز الإشعار
+         * وليس أيقونة التطبيق الرئيسية.
+         */
         NotificationCompat.Builder builder =
                 new NotificationCompat.Builder(
                         this,
                         CHANNEL_ID
                 )
+
                         .setSmallIcon(
-                                android.R.drawable.ic_dialog_info
+                                R.drawable.ic_notification
                         )
+
                         .setContentTitle(
                                 title
                         )
+
                         .setContentText(
                                 body
                         )
+
                         .setStyle(
                                 new NotificationCompat.BigTextStyle()
                                         .bigText(body)
                         )
+
                         .setPriority(
                                 NotificationCompat.PRIORITY_HIGH
                         )
+
                         .setAutoCancel(
                                 true
                         )
+
                         .setContentIntent(
                                 pendingIntent
+                        )
+
+                        .setCategory(
+                                NotificationCompat.CATEGORY_MESSAGE
                         );
 
         NotificationManager manager =
@@ -161,8 +186,11 @@ public class MyFirebaseMessagingService
 
         if (manager != null) {
 
+            int notificationId =
+                    (int) System.currentTimeMillis();
+
             manager.notify(
-                    (int) System.currentTimeMillis(),
+                    notificationId,
                     builder.build()
             );
         }
@@ -184,6 +212,8 @@ public class MyFirebaseMessagingService
             channel.setDescription(
                     "إشعارات الطلبات الجديدة"
             );
+
+            channel.enableVibration(true);
 
             NotificationManager manager =
                     getSystemService(
@@ -212,10 +242,11 @@ public class MyFirebaseMessagingService
         );
 
         /*
-         * لاحقًا سنربط هذه الدالة
-         * بنفس RPC الخاصة بـ Supabase
-         * حتى يتم تحديث Token تلقائيًا
-         * عند تغيّره.
+         * MainActivity يتعامل حاليًا مع
+         * حفظ الـToken في Supabase.
+         *
+         * لا نغير هذا الجزء الآن.
          */
     }
 }
+```
