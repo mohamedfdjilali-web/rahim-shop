@@ -1,65 +1,24 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
-import { importPKCS8, SignJWT } from "npm:jose@6";
-
 /*
 |--------------------------------------------------------------------------
-| CONFIG
+| SHOP-DZ - bright-worker
+|--------------------------------------------------------------------------
+| بدون supabase-js
+| بدون jose
+| يستخدم fetch + Web Crypto فقط
 |--------------------------------------------------------------------------
 */
 
 const SUPABASE_URL =
-    Deno.env.get("SUPABASE_URL")!;
+    Deno.env.get("SUPABASE_URL") || "";
 
-/*
-|--------------------------------------------------------------------------
-| Supabase Secret Key
-|--------------------------------------------------------------------------
-|
-| Supabase يوفر SUPABASE_SECRET_KEYS تلقائياً.
-|
-*/
-
-const secretKeys =
-    JSON.parse(
-        Deno.env.get("SUPABASE_SECRET_KEYS")!
-    );
-
-const SUPABASE_SECRET_KEY =
-    secretKeys["default"];
-
-/*
-|--------------------------------------------------------------------------
-| Supabase Admin Client
-|--------------------------------------------------------------------------
-*/
-
-const supabase =
-    createClient(
-        SUPABASE_URL,
-        SUPABASE_SECRET_KEY
-    );
-
-/*
-|--------------------------------------------------------------------------
-| Firebase Service Account
-|--------------------------------------------------------------------------
-*/
+const SUPABASE_SECRET_KEYS =
+    Deno.env.get("SUPABASE_SECRET_KEYS") || "";
 
 const FIREBASE_SERVICE_ACCOUNT_JSON =
-    Deno.env.get(
-        "FIREBASE_SERVICE_ACCOUNT_JSON"
-    );
-
-/*
-|--------------------------------------------------------------------------
-| Notification Secret
-|--------------------------------------------------------------------------
-*/
+    Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON") || "";
 
 const NOTIFICATION_SECRET =
-    Deno.env.get(
-        "NOTIFICATION_SECRET"
-    );
+    Deno.env.get("NOTIFICATION_SECRET") || "";
 
 /*
 |--------------------------------------------------------------------------
@@ -73,11 +32,7 @@ function jsonResponse(
 ): Response {
 
     return new Response(
-        JSON.stringify(
-            data,
-            null,
-            2
-        ),
+        JSON.stringify(data, null, 2),
         {
             status,
             headers: {
@@ -90,11 +45,141 @@ function jsonResponse(
 
 /*
 |--------------------------------------------------------------------------
+| SUPABASE SECRET KEY
+|--------------------------------------------------------------------------
+*/
+
+function getSupabaseSecretKey(): string {
+
+    if (!SUPABASE_SECRET_KEYS) {
+
+        throw new Error(
+            "SUPABASE_SECRET_KEYS is missing"
+        );
+    }
+
+    let parsed: Record<string, string>;
+
+    try {
+
+        parsed =
+            JSON.parse(
+                SUPABASE_SECRET_KEYS
+            );
+
+    } catch {
+
+        throw new Error(
+            "SUPABASE_SECRET_KEYS is not valid JSON"
+        );
+    }
+
+    const key =
+        parsed["default"];
+
+    if (!key) {
+
+        throw new Error(
+            "Default Supabase secret key not found"
+        );
+    }
+
+    return key;
+}
+
+/*
+|--------------------------------------------------------------------------
+| BASE64URL
+|--------------------------------------------------------------------------
+*/
+
+function base64UrlEncode(
+    input: Uint8Array
+): string {
+
+    let binary = "";
+
+    const chunkSize = 0x8000;
+
+    for (
+        let i = 0;
+        i < input.length;
+        i += chunkSize
+    ) {
+
+        binary += String.fromCharCode(
+            ...input.subarray(
+                i,
+                Math.min(
+                    i + chunkSize,
+                    input.length
+                )
+            )
+        );
+    }
+
+    return btoa(binary)
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/g, "");
+}
+
+/*
+|--------------------------------------------------------------------------
+| PEM -> DER
+|--------------------------------------------------------------------------
+*/
+
+function pemToArrayBuffer(
+    pem: string
+): ArrayBuffer {
+
+    const base64 =
+        pem
+            .replace(
+                /-----BEGIN PRIVATE KEY-----/g,
+                ""
+            )
+            .replace(
+                /-----END PRIVATE KEY-----/g,
+                ""
+            )
+            .replace(
+                /\s/g,
+                ""
+            );
+
+    const binary =
+        atob(base64);
+
+    const bytes =
+        new Uint8Array(
+            binary.length
+        );
+
+    for (
+        let i = 0;
+        i < binary.length;
+        i++
+    ) {
+
+        bytes[i] =
+            binary.charCodeAt(i);
+    }
+
+    return bytes.buffer;
+}
+
+/*
+|--------------------------------------------------------------------------
 | FIREBASE ACCESS TOKEN
 |--------------------------------------------------------------------------
 */
 
-async function getFirebaseAccessToken(): Promise<string> {
+async function getFirebaseAccessToken(): Promise<{
+    accessToken: string;
+    projectId: string;
+}> {
 
     console.log(
         "STEP 4: Starting Firebase OAuth"
@@ -107,97 +192,210 @@ async function getFirebaseAccessToken(): Promise<string> {
         );
     }
 
-    const serviceAccount =
-        JSON.parse(
-            FIREBASE_SERVICE_ACCOUNT_JSON
+    let serviceAccount: Record<string, unknown>;
+
+    try {
+
+        serviceAccount =
+            JSON.parse(
+                FIREBASE_SERVICE_ACCOUNT_JSON
+            );
+
+    } catch {
+
+        throw new Error(
+            "FIREBASE_SERVICE_ACCOUNT_JSON is invalid JSON"
+        );
+    }
+
+    const projectId =
+        String(
+            serviceAccount.project_id || ""
         );
 
-    console.log(
-        "Firebase project:",
-        serviceAccount.project_id
-    );
+    const clientEmail =
+        String(
+            serviceAccount.client_email || ""
+        );
 
-    if (!serviceAccount.client_email) {
+    const privateKeyPem =
+        String(
+            serviceAccount.private_key || ""
+        );
+
+    const tokenUri =
+        String(
+            serviceAccount.token_uri ||
+            "https://oauth2.googleapis.com/token"
+        );
+
+    if (!projectId) {
+
+        throw new Error(
+            "Firebase project_id is missing"
+        );
+    }
+
+    if (!clientEmail) {
 
         throw new Error(
             "Firebase client_email is missing"
         );
     }
 
-    if (!serviceAccount.private_key) {
+    if (!privateKeyPem) {
 
         throw new Error(
             "Firebase private_key is missing"
         );
     }
 
-    const tokenUri =
-        serviceAccount.token_uri ||
-        "https://oauth2.googleapis.com/token";
+    console.log(
+        "Firebase project:",
+        projectId
+    );
+
+    /*
+    |--------------------------------------------------------------------------
+    | IMPORT RSA PRIVATE KEY
+    |--------------------------------------------------------------------------
+    */
 
     const privateKey =
-        await importPKCS8(
-            serviceAccount.private_key,
-            "RS256"
+        await crypto.subtle.importKey(
+            "pkcs8",
+            pemToArrayBuffer(
+                privateKeyPem
+            ),
+            {
+                name:
+                    "RSASSA-PKCS1-v1_5",
+                hash:
+                    "SHA-256"
+            },
+            false,
+            ["sign"]
         );
+
+    /*
+    |--------------------------------------------------------------------------
+    | JWT HEADER
+    |--------------------------------------------------------------------------
+    */
+
+    const header = {
+
+        alg:
+            "RS256",
+
+        typ:
+            "JWT"
+    };
+
+    /*
+    |--------------------------------------------------------------------------
+    | JWT CLAIMS
+    |--------------------------------------------------------------------------
+    */
 
     const now =
         Math.floor(
             Date.now() / 1000
         );
 
+    const payload = {
+
+        iss:
+            clientEmail,
+
+        scope:
+            "https://www.googleapis.com/auth/firebase.messaging",
+
+        aud:
+            tokenUri,
+
+        iat:
+            now,
+
+        exp:
+            now + 3600
+    };
+
+    const encodedHeader =
+        base64UrlEncode(
+            new TextEncoder().encode(
+                JSON.stringify(header)
+            )
+        );
+
+    const encodedPayload =
+        base64UrlEncode(
+            new TextEncoder().encode(
+                JSON.stringify(payload)
+            )
+        );
+
+    const unsignedToken =
+        encodedHeader +
+        "." +
+        encodedPayload;
+
+    /*
+    |--------------------------------------------------------------------------
+    | SIGN JWT
+    |--------------------------------------------------------------------------
+    */
+
+    const signature =
+        await crypto.subtle.sign(
+            {
+                name:
+                    "RSASSA-PKCS1-v1_5"
+            },
+            privateKey,
+            new TextEncoder().encode(
+                unsignedToken
+            )
+        );
+
+    const encodedSignature =
+        base64UrlEncode(
+            new Uint8Array(
+                signature
+            )
+        );
+
     const assertion =
-        await new SignJWT({
-
-            scope:
-                "https://www.googleapis.com/auth/firebase.messaging"
-
-        })
-
-            .setProtectedHeader({
-                alg: "RS256",
-                typ: "JWT"
-            })
-
-            .setIssuer(
-                serviceAccount.client_email
-            )
-
-            .setSubject(
-                serviceAccount.client_email
-            )
-
-            .setAudience(
-                tokenUri
-            )
-
-            .setIssuedAt(now)
-
-            .setExpirationTime(
-                now + 3600
-            )
-
-            .sign(
-                privateKey
-            );
+        unsignedToken +
+        "." +
+        encodedSignature;
 
     console.log(
         "STEP 4A: Firebase JWT created"
     );
 
+    /*
+    |--------------------------------------------------------------------------
+    | GOOGLE OAUTH
+    |--------------------------------------------------------------------------
+    */
+
     const response =
         await fetch(
             tokenUri,
             {
-                method: "POST",
+                method:
+                    "POST",
 
                 headers: {
+
                     "Content-Type":
                         "application/x-www-form-urlencoded"
                 },
 
                 body:
                     new URLSearchParams({
+
                         grant_type:
                             "urn:ietf:params:oauth:grant-type:jwt-bearer",
 
@@ -223,17 +421,33 @@ async function getFirebaseAccessToken(): Promise<string> {
         );
 
         throw new Error(
-            "Firebase OAuth failed: " +
-            responseText
+            "Firebase OAuth failed: HTTP " +
+            response.status
         );
     }
 
-    const data =
-        JSON.parse(
-            responseText
+    let data: Record<string, unknown>;
+
+    try {
+
+        data =
+            JSON.parse(
+                responseText
+            );
+
+    } catch {
+
+        throw new Error(
+            "Firebase OAuth returned invalid JSON"
+        );
+    }
+
+    const accessToken =
+        String(
+            data.access_token || ""
         );
 
-    if (!data.access_token) {
+    if (!accessToken) {
 
         throw new Error(
             "Firebase access_token not found"
@@ -244,7 +458,171 @@ async function getFirebaseAccessToken(): Promise<string> {
         "STEP 4C: Firebase access token obtained"
     );
 
-    return data.access_token;
+    return {
+
+        accessToken:
+            accessToken,
+
+        projectId:
+            projectId
+    };
+}
+
+/*
+|--------------------------------------------------------------------------
+| READ ACTIVE TOKENS
+|--------------------------------------------------------------------------
+*/
+
+async function getActiveTokens(
+    supabaseSecretKey: string
+) {
+
+    console.log(
+        "STEP 3: Reading push_tokens"
+    );
+
+    const url =
+        SUPABASE_URL +
+        "/rest/v1/push_tokens" +
+        "?select=id,token&is_active=eq.true";
+
+    const response =
+        await fetch(
+            url,
+            {
+                method:
+                    "GET",
+
+                headers: {
+
+                    "apikey":
+                        supabaseSecretKey,
+
+                    "Authorization":
+                        "Bearer " +
+                        supabaseSecretKey,
+
+                    "Accept":
+                        "application/json"
+                }
+            }
+        );
+
+    const responseText =
+        await response.text();
+
+    console.log(
+        "Supabase push_tokens HTTP:",
+        response.status
+    );
+
+    if (!response.ok) {
+
+        console.error(
+            "Supabase push_tokens ERROR:",
+            responseText
+        );
+
+        throw new Error(
+            "push_tokens query failed: HTTP " +
+            response.status
+        );
+    }
+
+    let tokens;
+
+    try {
+
+        tokens =
+            JSON.parse(
+                responseText
+            );
+
+    } catch {
+
+        throw new Error(
+            "Supabase returned invalid JSON"
+        );
+    }
+
+    console.log(
+        "Token count:",
+        Array.isArray(tokens)
+            ? tokens.length
+            : 0
+    );
+
+    return Array.isArray(tokens)
+        ? tokens
+        : [];
+}
+
+/*
+|--------------------------------------------------------------------------
+| DISABLE TOKEN
+|--------------------------------------------------------------------------
+*/
+
+async function disableToken(
+    supabaseSecretKey: string,
+    id: number | string
+) {
+
+    console.log(
+        "Disabling invalid token:",
+        id
+    );
+
+    const url =
+        SUPABASE_URL +
+        "/rest/v1/push_tokens?id=eq." +
+        encodeURIComponent(
+            String(id)
+        );
+
+    const response =
+        await fetch(
+            url,
+            {
+                method:
+                    "PATCH",
+
+                headers: {
+
+                    "apikey":
+                        supabaseSecretKey,
+
+                    "Authorization":
+                        "Bearer " +
+                        supabaseSecretKey,
+
+                    "Content-Type":
+                        "application/json",
+
+                    "Prefer":
+                        "return=minimal"
+                },
+
+                body:
+                    JSON.stringify({
+                        is_active:
+                            false
+                    })
+            }
+        );
+
+    if (!response.ok) {
+
+        const text =
+            await response.text();
+
+        console.error(
+            "Disable token failed:",
+            response.status,
+            text
+        );
+    }
 }
 
 /*
@@ -259,10 +637,6 @@ async function sendFCM(
     token: string,
     order: Record<string, unknown>
 ) {
-
-    console.log(
-        "STEP 6: Preparing FCM request"
-    );
 
     const orderId =
         order.order_id != null
@@ -311,14 +685,15 @@ async function sendFCM(
 
     const url =
         "https://fcm.googleapis.com/v1/projects/" +
-        projectId +
+        encodeURIComponent(projectId) +
         "/messages:send";
 
     const payload = {
 
         message: {
 
-            token: token,
+            token:
+                token,
 
             notification: {
 
@@ -361,15 +736,12 @@ async function sendFCM(
         }
     };
 
-    console.log(
-        "STEP 6A: Sending FCM request"
-    );
-
     const response =
         await fetch(
             url,
             {
-                method: "POST",
+                method:
+                    "POST",
 
                 headers: {
 
@@ -392,13 +764,8 @@ async function sendFCM(
         await response.text();
 
     console.log(
-        "STEP 6B: FCM HTTP:",
+        "FCM HTTP:",
         response.status
-    );
-
-    console.log(
-        "STEP 6C: FCM Response:",
-        responseText
     );
 
     return {
@@ -416,7 +783,7 @@ async function sendFCM(
 
 /*
 |--------------------------------------------------------------------------
-| MAIN
+| MAIN FUNCTION
 |--------------------------------------------------------------------------
 */
 
@@ -433,16 +800,16 @@ Deno.serve(
 
         try {
 
+            /*
+            |--------------------------------------------------------------------------
+            | METHOD
+            |--------------------------------------------------------------------------
+            */
+
             console.log(
                 "HTTP Method:",
                 req.method
             );
-
-            /*
-            |--------------------------------------------------------------------------
-            | POST ONLY
-            |--------------------------------------------------------------------------
-            */
 
             if (
                 req.method !== "POST"
@@ -450,8 +817,11 @@ Deno.serve(
 
                 return jsonResponse(
                     {
-                        success: false,
-                        message: "POST only"
+                        success:
+                            false,
+
+                        message:
+                            "POST only"
                     },
                     405
                 );
@@ -459,7 +829,7 @@ Deno.serve(
 
             /*
             |--------------------------------------------------------------------------
-            | CHECK NOTIFICATION SECRET
+            | SECRET
             |--------------------------------------------------------------------------
             */
 
@@ -469,17 +839,8 @@ Deno.serve(
 
             if (!NOTIFICATION_SECRET) {
 
-                console.error(
-                    "NOTIFICATION_SECRET is missing"
-                );
-
-                return jsonResponse(
-                    {
-                        success: false,
-                        message:
-                            "NOTIFICATION_SECRET secret is missing"
-                    },
-                    500
+                throw new Error(
+                    "NOTIFICATION_SECRET secret is missing"
                 );
             }
 
@@ -500,7 +861,9 @@ Deno.serve(
 
                 return jsonResponse(
                     {
-                        success: false,
+                        success:
+                            false,
+
                         message:
                             "Unauthorized"
                     },
@@ -514,22 +877,46 @@ Deno.serve(
 
             /*
             |--------------------------------------------------------------------------
-            | READ JSON
+            | SUPABASE SECRET KEY
             |--------------------------------------------------------------------------
             */
 
-            const requestBody =
-                await req.json();
+            const supabaseSecretKey =
+                getSupabaseSecretKey();
+
+            console.log(
+                "STEP 1C: Supabase secret key loaded"
+            );
+
+            /*
+            |--------------------------------------------------------------------------
+            | REQUEST JSON
+            |--------------------------------------------------------------------------
+            */
+
+            let requestBody: unknown;
+
+            try {
+
+                requestBody =
+                    await req.json();
+
+            } catch {
+
+                return jsonResponse(
+                    {
+                        success:
+                            false,
+
+                        message:
+                            "Invalid JSON"
+                    },
+                    400
+                );
+            }
 
             console.log(
                 "STEP 2: Request body received"
-            );
-
-            console.log(
-                "Request body:",
-                JSON.stringify(
-                    requestBody
-                )
             );
 
             const order =
@@ -537,16 +924,10 @@ Deno.serve(
                     requestBody &&
                     typeof requestBody === "object" &&
                     "order" in requestBody &&
-                    requestBody.order
+                    (requestBody as Record<string, unknown>).order
                 )
-                    ? requestBody.order
+                    ? (requestBody as Record<string, unknown>).order
                     : requestBody;
-
-            /*
-            |--------------------------------------------------------------------------
-            | VALIDATE ORDER
-            |--------------------------------------------------------------------------
-            */
 
             if (
                 !order ||
@@ -555,7 +936,9 @@ Deno.serve(
 
                 return jsonResponse(
                     {
-                        success: false,
+                        success:
+                            false,
+
                         message:
                             "Invalid order data"
                     },
@@ -566,18 +949,22 @@ Deno.serve(
             const orderData =
                 order as Record<string, unknown>;
 
+            /*
+            |--------------------------------------------------------------------------
+            | VALIDATE ORDER
+            |--------------------------------------------------------------------------
+            */
+
             if (
                 !orderData.order_id &&
                 !orderData.order_number
             ) {
 
-                console.error(
-                    "Missing order_id/order_number"
-                );
-
                 return jsonResponse(
                     {
-                        success: false,
+                        success:
+                            false,
+
                         message:
                             "order_id or order_number is required"
                     },
@@ -597,102 +984,52 @@ Deno.serve(
 
             /*
             |--------------------------------------------------------------------------
-            | READ PUSH TOKENS
+            | TOKENS
             |--------------------------------------------------------------------------
             */
 
-            console.log(
-                "STEP 3: Reading push_tokens"
-            );
-
-            const {
-                data: tokens,
-                error: tokenError
-            } =
-                await supabase
-                    .from("push_tokens")
-                    .select(
-                        "id, token"
-                    )
-                    .eq(
-                        "is_active",
-                        true
-                    );
-
-            if (tokenError) {
-
-                console.error(
-                    "push_tokens ERROR:",
-                    tokenError
+            const tokens =
+                await getActiveTokens(
+                    supabaseSecretKey
                 );
-
-                throw new Error(
-                    "push_tokens query failed: " +
-                    tokenError.message
-                );
-            }
-
-            console.log(
-                "Token count:",
-                tokens?.length ?? 0
-            );
-
-            /*
-            |--------------------------------------------------------------------------
-            | NO TOKENS
-            |--------------------------------------------------------------------------
-            */
 
             if (
-                !tokens ||
                 tokens.length === 0
             ) {
 
                 return jsonResponse({
 
-                    success: false,
+                    success:
+                        false,
 
                     message:
                         "No active FCM tokens found",
 
-                    sent: 0,
+                    sent:
+                        0,
 
-                    failed: 0
+                    failed:
+                        0
                 });
             }
 
             /*
             |--------------------------------------------------------------------------
-            | FIREBASE TOKEN
+            | FIREBASE
             |--------------------------------------------------------------------------
             */
 
-            const firebaseAccessToken =
+            const firebase =
                 await getFirebaseAccessToken();
-
-            const serviceAccount =
-                JSON.parse(
-                    FIREBASE_SERVICE_ACCOUNT_JSON!
-                );
-
-            const projectId =
-                serviceAccount.project_id;
-
-            if (!projectId) {
-
-                throw new Error(
-                    "Firebase project_id missing"
-                );
-            }
 
             console.log(
                 "STEP 5: Firebase project:",
-                projectId
+                firebase.projectId
             );
 
             /*
             |--------------------------------------------------------------------------
-            | SEND TO ALL ACTIVE TOKENS
+            | SEND
             |--------------------------------------------------------------------------
             */
 
@@ -715,9 +1052,9 @@ Deno.serve(
 
                     const result =
                         await sendFCM(
-                            firebaseAccessToken,
-                            projectId,
-                            row.token,
+                            firebase.accessToken,
+                            firebase.projectId,
+                            String(row.token),
                             orderData
                         );
 
@@ -732,9 +1069,9 @@ Deno.serve(
                         failed++;
 
                         /*
-                        |--------------------------------------------------------------------------
-                        | DISABLE INVALID TOKEN
-                        |--------------------------------------------------------------------------
+                        |----------------------------------------------------------------------
+                        | FCM 400/404
+                        |----------------------------------------------------------------------
                         */
 
                         if (
@@ -742,20 +1079,10 @@ Deno.serve(
                             result.status === 404
                         ) {
 
-                            console.log(
-                                "Disabling invalid token:",
+                            await disableToken(
+                                supabaseSecretKey,
                                 row.id
                             );
-
-                            await supabase
-                                .from("push_tokens")
-                                .update({
-                                    is_active: false
-                                })
-                                .eq(
-                                    "id",
-                                    row.id
-                                );
                         }
                     }
 
@@ -781,7 +1108,9 @@ Deno.serve(
                     console.error(
                         "FCM token ERROR:",
                         row.id,
-                        error
+                        error instanceof Error
+                            ? error.message
+                            : String(error)
                     );
 
                     results.push({
@@ -857,7 +1186,9 @@ Deno.serve(
 
             console.error(
                 "FATAL FUNCTION ERROR:",
-                error
+                error instanceof Error
+                    ? error.message
+                    : String(error)
             );
 
             console.error(
@@ -866,7 +1197,8 @@ Deno.serve(
 
             return jsonResponse(
                 {
-                    success: false,
+                    success:
+                        false,
 
                     message:
                         error instanceof Error
