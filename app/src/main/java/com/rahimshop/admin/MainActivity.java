@@ -2,15 +2,9 @@ package com.rahimshop.admin;
 
 import android.app.Activity;
 import android.os.Bundle;
-import android.graphics.Color;
-import android.graphics.Typeface;
-import android.view.Gravity;
-import android.view.ViewGroup;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.widget.LinearLayout;
-import android.widget.TextView;
 
 import com.google.firebase.messaging.FirebaseMessaging;
 
@@ -36,81 +30,33 @@ public class MainActivity extends Activity {
             SUPABASE_URL + "/rest/v1/rpc/save_fcm_token";
 
     private WebView webView;
-    private TextView statusText;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        createInterface();
+        /*
+         * إنشاء WebView فقط
+         * بدون أي شريط رسائل أو Status Text
+         */
+        webView = new WebView(this);
 
-        addStatus(
-                "جاري تشغيل التطبيق...",
-                false
-        );
+        setContentView(webView);
 
         setupWebView();
 
+        /*
+         * الحصول على FCM Token وحفظه في Supabase
+         * في الخلفية بدون إظهار أي رسالة للمستخدم.
+         */
         getFCMToken();
     }
 
-    private void createInterface() {
-
-        LinearLayout root = new LinearLayout(this);
-
-        root.setOrientation(
-                LinearLayout.VERTICAL
-        );
-
-        root.setBackgroundColor(
-                Color.WHITE
-        );
-
-        statusText = new TextView(this);
-
-        statusText.setText(
-                "جاري تشغيل التطبيق..."
-        );
-
-        statusText.setTextSize(16f);
-
-        statusText.setTypeface(
-                null,
-                Typeface.BOLD
-        );
-
-        statusText.setGravity(
-                Gravity.CENTER_VERTICAL
-        );
-
-        statusText.setPadding(
-                dp(12),
-                dp(12),
-                dp(12),
-                dp(12)
-        );
-
-        root.addView(
-                statusText,
-                new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT
-                )
-        );
-
-        webView = new WebView(this);
-
-        root.addView(
-                webView,
-                new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        0,
-                        1f
-                )
-        );
-
-        setContentView(root);
-    }
+    /*
+     * ---------------------------------------------------------
+     * WEBVIEW
+     * ---------------------------------------------------------
+     */
 
     private void setupWebView() {
 
@@ -118,44 +64,63 @@ public class MainActivity extends Activity {
                 webView.getSettings();
 
         settings.setJavaScriptEnabled(true);
+
         settings.setDomStorageEnabled(true);
+
         settings.setDatabaseEnabled(true);
+
         settings.setLoadWithOverviewMode(true);
+
         settings.setUseWideViewPort(true);
 
+        /*
+         * السماح بالكوكيز مهم لتسجيل الدخول
+         * وحفظ جلسة الإدارة.
+         */
+        android.webkit.CookieManager
+                .getInstance()
+                .setAcceptCookie(true);
+
+        android.webkit.CookieManager
+                .getInstance()
+                .setAcceptThirdPartyCookies(
+                        webView,
+                        true
+                );
+
+        /*
+         * إبقاء الروابط داخل WebView.
+         */
         webView.setWebViewClient(
                 new WebViewClient()
         );
 
-        addStatus(
-                "جاري فتح SHOP-DZ...",
-                false
-        );
-
+        /*
+         * فتح الموقع.
+         */
         webView.loadUrl(
                 WEBSITE_URL
         );
     }
 
-    private void getFCMToken() {
+    /*
+     * ---------------------------------------------------------
+     * FCM TOKEN
+     * ---------------------------------------------------------
+     */
 
-        addStatus(
-                "جاري الحصول على FCM Token...",
-                false
-        );
+    private void getFCMToken() {
 
         FirebaseMessaging
                 .getInstance()
                 .getToken()
                 .addOnCompleteListener(task -> {
 
+                    /*
+                     * إذا فشل الحصول على Token
+                     * لا نعرض أي رسالة للمستخدم.
+                     */
                     if (!task.isSuccessful()) {
-
-                        addStatus(
-                                "❌ فشل الحصول على FCM Token\n\n"
-                                        + task.getException(),
-                                true
-                        );
 
                         return;
                     }
@@ -163,44 +128,41 @@ public class MainActivity extends Activity {
                     String token =
                             task.getResult();
 
+                    /*
+                     * التأكد من أن Token صالح.
+                     */
                     if (token == null
                             || token.trim().isEmpty()) {
-
-                        addStatus(
-                                "❌ FCM Token فارغ",
-                                true
-                        );
 
                         return;
                     }
 
-                    addStatus(
-                            "✅ تم الحصول على FCM Token\n\n"
-                                    + "طول Token = "
-                                    + token.length()
-                                    + "\n\n"
-                                    + "جاري الإرسال إلى Supabase...",
-                            false
+                    /*
+                     * إرسال Token إلى Supabase
+                     * في Thread مستقل.
+                     */
+                    sendTokenToSupabase(
+                            token
                     );
-
-                    sendTokenToSupabase(token);
                 });
     }
 
-    private void sendTokenToSupabase(String token) {
+    /*
+     * ---------------------------------------------------------
+     * SEND TOKEN TO SUPABASE
+     * ---------------------------------------------------------
+     */
+
+    private void sendTokenToSupabase(
+            String token
+    ) {
 
         new Thread(() -> {
 
-            HttpURLConnection connection = null;
+            HttpURLConnection connection =
+                    null;
 
             try {
-
-                addStatus(
-                        "📡 جاري الاتصال بـ Supabase RPC...\n\n"
-                                + "Token length = "
-                                + token.length(),
-                        false
-                );
 
                 URL url =
                         new URL(
@@ -223,14 +185,20 @@ public class MainActivity extends Activity {
                         15000
                 );
 
-                connection.setUseCaches(false);
+                connection.setUseCaches(
+                        false
+                );
 
-                connection.setDoInput(true);
+                connection.setDoInput(
+                        true
+                );
 
-                connection.setDoOutput(true);
+                connection.setDoOutput(
+                        true
+                );
 
                 /*
-                 * Publishable key
+                 * Supabase Publishable Key
                  */
                 connection.setRequestProperty(
                         "apikey",
@@ -238,13 +206,9 @@ public class MainActivity extends Activity {
                 );
 
                 /*
-                 * لا نضع:
-                 *
-                 * Authorization: Bearer sb_publishable_...
-                 *
-                 * لأن publishable key ليست JWT.
+                 * لا نضع Service Role Key
+                 * داخل تطبيق Android.
                  */
-
                 connection.setRequestProperty(
                         "Content-Type",
                         "application/json"
@@ -256,7 +220,7 @@ public class MainActivity extends Activity {
                 );
 
                 /*
-                 * RPC parameters
+                 * JSON الخاص بالـRPC.
                  */
                 String json =
                         "{"
@@ -277,6 +241,10 @@ public class MainActivity extends Activity {
 
                 outputStream.close();
 
+                /*
+                 * قراءة الرد فقط للتشخيص الداخلي.
+                 * لن يظهر للمستخدم.
+                 */
                 int responseCode =
                         connection.getResponseCode();
 
@@ -294,51 +262,26 @@ public class MainActivity extends Activity {
                             connection.getErrorStream();
                 }
 
-                String serverResponse =
-                        readStream(inputStream);
-
-                if (responseCode >= 200
-                        && responseCode < 300) {
-
-                    addStatus(
-                            "✅ تم حفظ FCM Token بنجاح\n\n"
-                                    + "Supabase RPC HTTP Code: "
-                                    + responseCode
-                                    + "\n\n"
-                                    + "Token length: "
-                                    + token.length()
-                                    + "\n\n"
-                                    + serverResponse,
-                            false
-                    );
-
-                } else {
-
-                    addStatus(
-                            "❌ Supabase RPC رفض الطلب\n\n"
-                                    + "HTTP Code: "
-                                    + responseCode
-                                    + "\n\n"
-                                    + "Server Response:\n"
-                                    + serverResponse,
-                            true
-                    );
-                }
-
-            } catch (Exception e) {
-
-                addStatus(
-                        "❌ خطأ في الاتصال بـ Supabase\n\n"
-                                + e.getClass()
-                                .getSimpleName()
-                                + "\n\n"
-                                + e.getMessage(),
-                        true
+                /*
+                 * قراءة الرد حتى لا يبقى الاتصال مفتوحًا.
+                 */
+                readStream(
+                        inputStream
                 );
+
+            } catch (Exception ignored) {
+
+                /*
+                 * لا نعرض أي Error للمستخدم.
+                 *
+                 * FCM سيستمر بالعمل حتى لو فشل
+                 * حفظ Token في هذه المحاولة.
+                 */
 
             } finally {
 
                 if (connection != null) {
+
                     connection.disconnect();
                 }
             }
@@ -346,24 +289,57 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    private String escapeJson(String value) {
+    /*
+     * ---------------------------------------------------------
+     * JSON ESCAPE
+     * ---------------------------------------------------------
+     */
+
+    private String escapeJson(
+            String value
+    ) {
 
         if (value == null) {
+
             return "";
         }
 
         return value
-                .replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
+                .replace(
+                        "\\",
+                        "\\\\"
+                )
+                .replace(
+                        "\"",
+                        "\\\""
+                )
+                .replace(
+                        "\n",
+                        "\\n"
+                )
+                .replace(
+                        "\r",
+                        "\\r"
+                )
+                .replace(
+                        "\t",
+                        "\\t"
+                );
     }
 
-    private String readStream(InputStream inputStream) {
+    /*
+     * ---------------------------------------------------------
+     * READ SERVER RESPONSE
+     * ---------------------------------------------------------
+     */
+
+    private String readStream(
+            InputStream inputStream
+    ) {
 
         if (inputStream == null) {
-            return "لا يوجد رد من السيرفر";
+
+            return "";
         }
 
         StringBuilder result =
@@ -387,58 +363,23 @@ public class MainActivity extends Activity {
             ) {
 
                 result.append(line);
-                result.append("\n");
             }
 
             reader.close();
 
-        } catch (Exception e) {
+        } catch (Exception ignored) {
 
-            return "فشل قراءة رد السيرفر:\n"
-                    + e.getMessage();
+            return "";
         }
 
-        return result.toString().trim();
+        return result.toString();
     }
 
-    private void addStatus(
-            String message,
-            boolean error
-    ) {
-
-        runOnUiThread(() -> {
-
-            if (statusText == null) {
-                return;
-            }
-
-            statusText.setText(message);
-
-            if (error) {
-
-                statusText.setTextColor(
-                        Color.rgb(180, 0, 0)
-                );
-
-            } else {
-
-                statusText.setTextColor(
-                        Color.rgb(0, 100, 50)
-                );
-            }
-        });
-    }
-
-    private int dp(int value) {
-
-        float density =
-                getResources()
-                        .getDisplayMetrics()
-                        .density;
-
-        return (int)
-                (value * density + 0.5f);
-    }
+    /*
+     * ---------------------------------------------------------
+     * BACK BUTTON
+     * ---------------------------------------------------------
+     */
 
     @Override
     public void onBackPressed() {
@@ -452,5 +393,28 @@ public class MainActivity extends Activity {
 
             super.onBackPressed();
         }
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * DESTROY WEBVIEW
+     * ---------------------------------------------------------
+     */
+
+    @Override
+    protected void onDestroy() {
+
+        if (webView != null) {
+
+            webView.stopLoading();
+
+            webView.setWebViewClient(null);
+
+            webView.destroy();
+
+            webView = null;
+        }
+
+        super.onDestroy();
     }
 }
