@@ -1,9 +1,9 @@
 package com.rahimshop.admin;
 
 import android.app.Activity;
-import android.os.Bundle;
 import android.graphics.Color;
-import android.graphics.Typeface;
+import android.os.Bundle;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.ViewGroup;
 import android.webkit.WebChromeClient;
@@ -11,7 +11,6 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.LinearLayout;
-import android.widget.TextView;
 
 import com.google.firebase.messaging.FirebaseMessaging;
 
@@ -23,6 +22,8 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 
 public class MainActivity extends Activity {
+
+    private static final String TAG = "RahimShopFCM";
 
     private static final String WEBSITE_URL =
             "https://shop-dz.gt.tc/admin/login.php";
@@ -37,71 +38,46 @@ public class MainActivity extends Activity {
             SUPABASE_URL + "/rest/v1/rpc/save_fcm_token";
 
     private WebView webView;
-    private TextView statusText;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         createInterface();
+
         setupWebView();
 
         /*
-         * الحصول على FCM Token في الخلفية.
+         * الحصول على الـToken الحالي في الخلفية.
          *
-         * لا نعرض للمستخدم:
-         * - جاري الحصول على Token
-         * - تم الحصول على Token
-         * - جاري الإرسال إلى Supabase
-         *
-         * التطبيق سيظهر فقط الموقع.
+         * لا تظهر أي رسالة للمستخدم.
          */
         getFCMToken();
     }
 
     private void createInterface() {
 
-        LinearLayout root =
-                new LinearLayout(this);
+        LinearLayout root = new LinearLayout(this);
 
         root.setOrientation(
                 LinearLayout.VERTICAL
+        );
+
+        root.setGravity(
+                Gravity.CENTER
         );
 
         root.setBackgroundColor(
                 Color.WHITE
         );
 
-        /*
-         * شريط الحالة مخفي.
-         *
-         * نحتفظ به داخليًا حتى نستطيع عرض
-         * أخطاء مهمة فقط إذا حدثت مشكلة.
-         */
-        statusText =
-                new TextView(this);
-
-        statusText.setVisibility(
-                TextView.GONE
-        );
-
-        root.addView(
-                statusText,
-                new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT
-                )
-        );
-
-        webView =
-                new WebView(this);
+        webView = new WebView(this);
 
         root.addView(
                 webView,
                 new LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
-                        0,
-                        1f
+                        ViewGroup.LayoutParams.MATCH_PARENT
                 )
         );
 
@@ -116,12 +92,16 @@ public class MainActivity extends Activity {
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
+
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
 
+        settings.setAllowFileAccess(true);
+        settings.setAllowContentAccess(true);
+
         /*
-         * السماح بالـ JavaScript dialogs
-         * والمحتوى المتوافق مع الموقع.
+         * WebChromeClient ضروري لبعض وظائف الموقع
+         * مثل JavaScript dialogs وبعض المحتويات.
          */
         webView.setWebChromeClient(
                 new WebChromeClient()
@@ -151,12 +131,8 @@ public class MainActivity extends Activity {
 
                     if (!task.isSuccessful()) {
 
-                        /*
-                         * لا نعرض الخطأ للمستخدم.
-                         * فقط Logcat للمطور.
-                         */
-                        android.util.Log.e(
-                                "RahimShopFCM",
+                        Log.e(
+                                TAG,
                                 "Failed to get FCM token",
                                 task.getException()
                         );
@@ -167,25 +143,28 @@ public class MainActivity extends Activity {
                     String token =
                             task.getResult();
 
-                    if (token == null
-                            || token.trim().isEmpty()) {
+                    if (token == null ||
+                            token.trim().isEmpty()) {
 
-                        android.util.Log.e(
-                                "RahimShopFCM",
+                        Log.e(
+                                TAG,
                                 "FCM token is empty"
                         );
 
                         return;
                     }
 
-                    android.util.Log.d(
-                            "RahimShopFCM",
-                            "FCM token obtained. Length = "
+                    Log.d(
+                            TAG,
+                            "Current FCM token obtained. Length = "
                                     + token.length()
                     );
 
                     /*
-                     * حفظ آخر Token في Supabase.
+                     * حفظ الـToken الحالي في Supabase.
+                     *
+                     * RPC يستخدم ON CONFLICT لذلك إذا كان
+                     * الـToken موجودًا سيتم تحديثه فقط.
                      */
                     sendTokenToSupabase(token);
                 });
@@ -197,14 +176,24 @@ public class MainActivity extends Activity {
      * =========================================================
      */
 
-    private void sendTokenToSupabase(
+    public static void sendTokenToSupabase(
             String token
     ) {
 
+        if (token == null ||
+                token.trim().isEmpty()) {
+
+            Log.e(
+                    TAG,
+                    "Cannot send empty FCM token"
+            );
+
+            return;
+        }
+
         new Thread(() -> {
 
-            HttpURLConnection connection =
-                    null;
+            HttpURLConnection connection = null;
 
             try {
 
@@ -241,9 +230,6 @@ public class MainActivity extends Activity {
                         true
                 );
 
-                /*
-                 * Supabase Publishable Key
-                 */
                 connection.setRequestProperty(
                         "apikey",
                         SUPABASE_PUBLISHABLE_KEY
@@ -260,7 +246,12 @@ public class MainActivity extends Activity {
                 );
 
                 /*
-                 * RPC parameters
+                 * RPC:
+                 *
+                 * save_fcm_token(
+                 *     p_token,
+                 *     p_platform
+                 * )
                  */
                 String json =
                         "{"
@@ -285,8 +276,8 @@ public class MainActivity extends Activity {
 
                 InputStream inputStream;
 
-                if (responseCode >= 200
-                        && responseCode < 400) {
+                if (responseCode >= 200 &&
+                        responseCode < 400) {
 
                     inputStream =
                             connection.getInputStream();
@@ -302,11 +293,11 @@ public class MainActivity extends Activity {
                                 inputStream
                         );
 
-                if (responseCode >= 200
-                        && responseCode < 300) {
+                if (responseCode >= 200 &&
+                        responseCode < 300) {
 
-                    android.util.Log.d(
-                            "RahimShopFCM",
+                    Log.d(
+                            TAG,
                             "FCM token saved successfully. HTTP "
                                     + responseCode
                                     + " Response: "
@@ -315,8 +306,8 @@ public class MainActivity extends Activity {
 
                 } else {
 
-                    android.util.Log.e(
-                            "RahimShopFCM",
+                    Log.e(
+                            TAG,
                             "Failed to save FCM token. HTTP "
                                     + responseCode
                                     + " Response: "
@@ -326,12 +317,8 @@ public class MainActivity extends Activity {
 
             } catch (Exception e) {
 
-                /*
-                 * الخطأ يظهر فقط في Logcat.
-                 * لا نزعج المستخدم برسالة على الشاشة.
-                 */
-                android.util.Log.e(
-                        "RahimShopFCM",
+                Log.e(
+                        TAG,
                         "Supabase token error",
                         e
                 );
@@ -352,7 +339,7 @@ public class MainActivity extends Activity {
      * =========================================================
      */
 
-    private String escapeJson(
+    private static String escapeJson(
             String value
     ) {
 
@@ -389,13 +376,13 @@ public class MainActivity extends Activity {
      * =========================================================
      */
 
-    private String readStream(
+    private static String readStream(
             InputStream inputStream
     ) {
 
         if (inputStream == null) {
 
-            return "لا يوجد رد من السيرفر";
+            return "No server response";
         }
 
         StringBuilder result =
@@ -426,7 +413,7 @@ public class MainActivity extends Activity {
 
         } catch (Exception e) {
 
-            return "Failed to read server response: "
+            return "Failed to read response: "
                     + e.getMessage();
         }
 
@@ -444,8 +431,8 @@ public class MainActivity extends Activity {
     @Override
     public void onBackPressed() {
 
-        if (webView != null
-                && webView.canGoBack()) {
+        if (webView != null &&
+                webView.canGoBack()) {
 
             webView.goBack();
 
@@ -467,8 +454,15 @@ public class MainActivity extends Activity {
         if (webView != null) {
 
             webView.stopLoading();
-            webView.setWebChromeClient(null);
-            webView.setWebViewClient(null);
+
+            webView.setWebChromeClient(
+                    null
+            );
+
+            webView.setWebViewClient(
+                    null
+            );
+
             webView.destroy();
 
             webView = null;
