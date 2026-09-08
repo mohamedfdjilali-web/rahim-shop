@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.os.Build;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
 
 import com.google.firebase.messaging.FirebaseMessagingService;
@@ -22,9 +23,15 @@ public class MyFirebaseMessagingService
     private static final String CHANNEL_ID =
             "rahim_shop_orders";
 
+    /*
+     * =========================================================
+     * RECEIVE MESSAGE
+     * =========================================================
+     */
+
     @Override
     public void onMessageReceived(
-            RemoteMessage remoteMessage
+            @NonNull RemoteMessage remoteMessage
     ) {
 
         Log.d(
@@ -53,16 +60,18 @@ public class MyFirebaseMessagingService
                             .getNotification()
                             .getBody();
 
-            if (notificationTitle != null
-                    && !notificationTitle.isEmpty()) {
+            if (notificationTitle != null &&
+                    !notificationTitle.isEmpty()) {
 
-                title = notificationTitle;
+                title =
+                        notificationTitle;
             }
 
-            if (notificationBody != null
-                    && !notificationBody.isEmpty()) {
+            if (notificationBody != null &&
+                    !notificationBody.isEmpty()) {
 
-                body = notificationBody;
+                body =
+                        notificationBody;
             }
         }
 
@@ -83,24 +92,66 @@ public class MyFirebaseMessagingService
                             .getData()
                             .get("body");
 
-            if (dataTitle != null
-                    && !dataTitle.isEmpty()) {
+            if (dataTitle != null &&
+                    !dataTitle.isEmpty()) {
 
-                title = dataTitle;
+                title =
+                        dataTitle;
             }
 
-            if (dataBody != null
-                    && !dataBody.isEmpty()) {
+            if (dataBody != null &&
+                    !dataBody.isEmpty()) {
 
-                body = dataBody;
+                body =
+                        dataBody;
             }
         }
 
+        /*
+         * إظهار الإشعار عندما تصل الرسالة
+         * إلى onMessageReceived.
+         */
         showNotification(
                 title,
                 body
         );
     }
+
+    /*
+     * =========================================================
+     * NEW FCM TOKEN
+     * =========================================================
+     */
+
+    @Override
+    public void onNewToken(
+            @NonNull String token
+    ) {
+
+        super.onNewToken(token);
+
+        Log.d(
+                TAG,
+                "New FCM token received. Length = "
+                        + token.length()
+        );
+
+        /*
+         * Firebase استدعى onNewToken لأن الـToken
+         * جديد أو تغير.
+         *
+         * نرسله مباشرة إلى Supabase.
+         */
+        MainActivity.sendTokenToSupabase(
+                token
+        );
+    }
+
+    /*
+     * =========================================================
+     * SHOW NOTIFICATION
+     * =========================================================
+     */
 
     private void showNotification(
             String title,
@@ -109,9 +160,6 @@ public class MyFirebaseMessagingService
 
         createNotificationChannel();
 
-        /*
-         * فتح MainActivity عند الضغط على الإشعار
-         */
         Intent intent =
                 new Intent(
                         this,
@@ -119,24 +167,28 @@ public class MyFirebaseMessagingService
                 );
 
         intent.addFlags(
-                Intent.FLAG_ACTIVITY_CLEAR_TOP
+                Intent.FLAG_ACTIVITY_CLEAR_TOP |
+                Intent.FLAG_ACTIVITY_SINGLE_TOP
         );
 
         PendingIntent pendingIntent =
                 PendingIntent.getActivity(
                         this,
-                        0,
+                        1001,
                         intent,
-                        PendingIntent.FLAG_UPDATE_CURRENT
-                                | PendingIntent.FLAG_IMMUTABLE
+                        PendingIntent.FLAG_UPDATE_CURRENT |
+                                PendingIntent.FLAG_IMMUTABLE
                 );
 
         /*
-         * إنشاء الإشعار
+         * أيقونة الإشعار.
          *
-         * مهم:
-         * ic_notification هو رمز الإشعار
-         * وليس أيقونة التطبيق الرئيسية.
+         * app_icon يجب أن يكون موجودًا داخل:
+         *
+         * app/src/main/res/drawable/app_icon.png
+         *
+         * إذا كانت أيقونتك الحالية تعمل بهذا الاسم
+         * اتركها كما هي.
          */
         NotificationCompat.Builder builder =
                 new NotificationCompat.Builder(
@@ -145,7 +197,7 @@ public class MyFirebaseMessagingService
                 )
 
                         .setSmallIcon(
-                                R.drawable.ic_notification
+                                R.drawable.app_icon
                         )
 
                         .setContentTitle(
@@ -157,7 +209,8 @@ public class MyFirebaseMessagingService
                         )
 
                         .setStyle(
-                                new NotificationCompat.BigTextStyle()
+                                new NotificationCompat
+                                        .BigTextStyle()
                                         .bigText(body)
                         )
 
@@ -173,8 +226,8 @@ public class MyFirebaseMessagingService
                                 pendingIntent
                         )
 
-                        .setCategory(
-                                NotificationCompat.CATEGORY_MESSAGE
+                        .setDefaults(
+                                NotificationCompat.DEFAULT_ALL
                         );
 
         NotificationManager manager =
@@ -186,7 +239,8 @@ public class MyFirebaseMessagingService
         if (manager != null) {
 
             int notificationId =
-                    (int) System.currentTimeMillis();
+                    (int)
+                            System.currentTimeMillis();
 
             manager.notify(
                     notificationId,
@@ -194,6 +248,12 @@ public class MyFirebaseMessagingService
             );
         }
     }
+
+    /*
+     * =========================================================
+     * NOTIFICATION CHANNEL
+     * =========================================================
+     */
 
     private void createNotificationChannel() {
 
@@ -212,7 +272,9 @@ public class MyFirebaseMessagingService
                     "إشعارات الطلبات الجديدة"
             );
 
-            channel.enableVibration(true);
+            channel.enableVibration(
+                    true
+            );
 
             NotificationManager manager =
                     getSystemService(
@@ -226,25 +288,5 @@ public class MyFirebaseMessagingService
                 );
             }
         }
-    }
-
-    @Override
-    public void onNewToken(
-            String token
-    ) {
-
-        super.onNewToken(token);
-
-        Log.d(
-                TAG,
-                "New FCM Token: " + token
-        );
-
-        /*
-         * MainActivity يتعامل حاليًا مع
-         * حفظ الـToken في Supabase.
-         *
-         * لا نغير هذا الجزء الآن.
-         */
     }
 }
