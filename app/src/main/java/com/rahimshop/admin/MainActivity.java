@@ -1,14 +1,17 @@
 package com.rahimshop.admin;
 
-import android.Manifest;
 import android.app.Activity;
-import android.content.pm.PackageManager;
-import android.os.Build;
 import android.os.Bundle;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.view.Gravity;
+import android.view.ViewGroup;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import com.google.firebase.messaging.FirebaseMessaging;
 
@@ -21,17 +24,8 @@ import java.net.URL;
 
 public class MainActivity extends Activity {
 
-    // =========================================================
-    // SHOP-DZ WEBSITE
-    // =========================================================
-
     private static final String WEBSITE_URL =
             "https://shop-dz.gt.tc/admin/login.php";
-
-
-    // =========================================================
-    // SUPABASE
-    // =========================================================
 
     private static final String SUPABASE_URL =
             "https://tkntrbjsdxhizebascai.supabase.co";
@@ -39,138 +33,114 @@ public class MainActivity extends Activity {
     private static final String SUPABASE_PUBLISHABLE_KEY =
             "sb_publishable_P5ElVLCeoQrLdrbfI7G6Qg_hVR51Evo";
 
-
-    // =========================================================
-    // SUPABASE RPC
-    // =========================================================
-
     private static final String SUPABASE_RPC_URL =
-            SUPABASE_URL
-                    + "/rest/v1/rpc/save_fcm_token";
-
-
-    // =========================================================
-    // WEBVIEW
-    // =========================================================
+            SUPABASE_URL + "/rest/v1/rpc/save_fcm_token";
 
     private WebView webView;
-
-
-    // =========================================================
-    // ON CREATE
-    // =========================================================
+    private TextView statusText;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-
         super.onCreate(savedInstanceState);
 
-        // فتح الموقع مباشرة
+        createInterface();
         setupWebView();
 
-        // إذن الإشعارات Android 13+
-        requestNotificationPermission();
-
-        // الحصول على FCM Token وحفظه في Supabase
+        /*
+         * الحصول على FCM Token في الخلفية.
+         *
+         * لا نعرض للمستخدم:
+         * - جاري الحصول على Token
+         * - تم الحصول على Token
+         * - جاري الإرسال إلى Supabase
+         *
+         * التطبيق سيظهر فقط الموقع.
+         */
         getFCMToken();
     }
 
+    private void createInterface() {
 
-    // =========================================================
-    // SETUP WEBVIEW
-    // =========================================================
+        LinearLayout root =
+                new LinearLayout(this);
+
+        root.setOrientation(
+                LinearLayout.VERTICAL
+        );
+
+        root.setBackgroundColor(
+                Color.WHITE
+        );
+
+        /*
+         * شريط الحالة مخفي.
+         *
+         * نحتفظ به داخليًا حتى نستطيع عرض
+         * أخطاء مهمة فقط إذا حدثت مشكلة.
+         */
+        statusText =
+                new TextView(this);
+
+        statusText.setVisibility(
+                TextView.GONE
+        );
+
+        root.addView(
+                statusText,
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+        );
+
+        webView =
+                new WebView(this);
+
+        root.addView(
+                webView,
+                new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        0,
+                        1f
+                )
+        );
+
+        setContentView(root);
+    }
 
     private void setupWebView() {
-
-        webView = new WebView(this);
 
         WebSettings settings =
                 webView.getSettings();
 
-        // JavaScript
         settings.setJavaScriptEnabled(true);
-
-        // Local Storage
         settings.setDomStorageEnabled(true);
-
-        // Database
         settings.setDatabaseEnabled(true);
-
-        // Display
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
 
-        // Zoom
-        settings.setBuiltInZoomControls(false);
-        settings.setDisplayZoomControls(false);
-        settings.setSupportZoom(false);
-
-        // File access
-        settings.setAllowFileAccess(true);
-        settings.setAllowContentAccess(true);
-
-        // -----------------------------------------------------
-        // WebViewClient
-        // -----------------------------------------------------
-
-        webView.setWebViewClient(
-                new WebViewClient()
-        );
-
-        // -----------------------------------------------------
-        // WebChromeClient
-        // -----------------------------------------------------
-
+        /*
+         * السماح بالـ JavaScript dialogs
+         * والمحتوى المتوافق مع الموقع.
+         */
         webView.setWebChromeClient(
                 new WebChromeClient()
         );
 
-        // -----------------------------------------------------
-        // وضع WebView كواجهة التطبيق
-        // -----------------------------------------------------
-
-        setContentView(webView);
-
-        // -----------------------------------------------------
-        // فتح SHOP-DZ
-        // -----------------------------------------------------
+        webView.setWebViewClient(
+                new WebViewClient()
+        );
 
         webView.loadUrl(
                 WEBSITE_URL
         );
     }
 
-
-    // =========================================================
-    // NOTIFICATION PERMISSION
-    // =========================================================
-
-    private void requestNotificationPermission() {
-
-        if (Build.VERSION.SDK_INT >=
-                Build.VERSION_CODES.TIRAMISU) {
-
-            if (
-                    checkSelfPermission(
-                            Manifest.permission.POST_NOTIFICATIONS
-                    )
-                            != PackageManager.PERMISSION_GRANTED
-            ) {
-
-                requestPermissions(
-                        new String[]{
-                                Manifest.permission.POST_NOTIFICATIONS
-                        },
-                        1001
-                );
-            }
-        }
-    }
-
-
-    // =========================================================
-    // GET FCM TOKEN
-    // =========================================================
+    /*
+     * =========================================================
+     * FCM TOKEN
+     * =========================================================
+     */
 
     private void getFCMToken() {
 
@@ -181,30 +151,51 @@ public class MainActivity extends Activity {
 
                     if (!task.isSuccessful()) {
 
-                        // لا نعرض أي رسالة للمستخدم
+                        /*
+                         * لا نعرض الخطأ للمستخدم.
+                         * فقط Logcat للمطور.
+                         */
+                        android.util.Log.e(
+                                "RahimShopFCM",
+                                "Failed to get FCM token",
+                                task.getException()
+                        );
+
                         return;
                     }
 
                     String token =
                             task.getResult();
 
-                    if (
-                            token == null ||
-                            token.trim().isEmpty()
-                    ) {
+                    if (token == null
+                            || token.trim().isEmpty()) {
+
+                        android.util.Log.e(
+                                "RahimShopFCM",
+                                "FCM token is empty"
+                        );
 
                         return;
                     }
 
-                    // حفظ Token في Supabase
+                    android.util.Log.d(
+                            "RahimShopFCM",
+                            "FCM token obtained. Length = "
+                                    + token.length()
+                    );
+
+                    /*
+                     * حفظ آخر Token في Supabase.
+                     */
                     sendTokenToSupabase(token);
                 });
     }
 
-
-    // =========================================================
-    // SEND TOKEN TO SUPABASE
-    // =========================================================
+    /*
+     * =========================================================
+     * SEND TOKEN TO SUPABASE
+     * =========================================================
+     */
 
     private void sendTokenToSupabase(
             String token
@@ -212,7 +203,8 @@ public class MainActivity extends Activity {
 
         new Thread(() -> {
 
-            HttpURLConnection connection = null;
+            HttpURLConnection connection =
+                    null;
 
             try {
 
@@ -224,11 +216,6 @@ public class MainActivity extends Activity {
                 connection =
                         (HttpURLConnection)
                                 url.openConnection();
-
-
-                // -------------------------------------------------
-                // HTTP
-                // -------------------------------------------------
 
                 connection.setRequestMethod(
                         "POST"
@@ -254,11 +241,9 @@ public class MainActivity extends Activity {
                         true
                 );
 
-
-                // -------------------------------------------------
-                // SUPABASE HEADERS
-                // -------------------------------------------------
-
+                /*
+                 * Supabase Publishable Key
+                 */
                 connection.setRequestProperty(
                         "apikey",
                         SUPABASE_PUBLISHABLE_KEY
@@ -266,7 +251,7 @@ public class MainActivity extends Activity {
 
                 connection.setRequestProperty(
                         "Content-Type",
-                        "application/json"
+                        "application/json; charset=UTF-8"
                 );
 
                 connection.setRequestProperty(
@@ -274,11 +259,9 @@ public class MainActivity extends Activity {
                         "application/json"
                 );
 
-
-                // -------------------------------------------------
-                // RPC JSON
-                // -------------------------------------------------
-
+                /*
+                 * RPC parameters
+                 */
                 String json =
                         "{"
                                 + "\"p_token\":\""
@@ -286,11 +269,6 @@ public class MainActivity extends Activity {
                                 + "\","
                                 + "\"p_platform\":\"android\""
                                 + "}";
-
-
-                // -------------------------------------------------
-                // SEND
-                // -------------------------------------------------
 
                 OutputStream outputStream =
                         connection.getOutputStream();
@@ -300,23 +278,15 @@ public class MainActivity extends Activity {
                 );
 
                 outputStream.flush();
-
                 outputStream.close();
-
-
-                // -------------------------------------------------
-                // READ RESPONSE
-                // -------------------------------------------------
 
                 int responseCode =
                         connection.getResponseCode();
 
                 InputStream inputStream;
 
-                if (
-                        responseCode >= 200 &&
-                        responseCode < 400
-                ) {
+                if (responseCode >= 200
+                        && responseCode < 400) {
 
                     inputStream =
                             connection.getInputStream();
@@ -327,25 +297,48 @@ public class MainActivity extends Activity {
                             connection.getErrorStream();
                 }
 
-                /*
-                 * نقرأ الرد فقط حتى لا يبقى الاتصال مفتوحًا.
-                 * لا نعرضه داخل التطبيق.
-                 */
+                String response =
+                        readStream(
+                                inputStream
+                        );
 
-                readStream(
-                        inputStream
+                if (responseCode >= 200
+                        && responseCode < 300) {
+
+                    android.util.Log.d(
+                            "RahimShopFCM",
+                            "FCM token saved successfully. HTTP "
+                                    + responseCode
+                                    + " Response: "
+                                    + response
+                    );
+
+                } else {
+
+                    android.util.Log.e(
+                            "RahimShopFCM",
+                            "Failed to save FCM token. HTTP "
+                                    + responseCode
+                                    + " Response: "
+                                    + response
+                    );
+                }
+
+            } catch (Exception e) {
+
+                /*
+                 * الخطأ يظهر فقط في Logcat.
+                 * لا نزعج المستخدم برسالة على الشاشة.
+                 */
+                android.util.Log.e(
+                        "RahimShopFCM",
+                        "Supabase token error",
+                        e
                 );
-
-            } catch (Exception ignored) {
-
-                /*
-                 * لا تظهر أخطاء Supabase للمستخدم.
-                 */
 
             } finally {
 
                 if (connection != null) {
-
                     connection.disconnect();
                 }
             }
@@ -353,17 +346,17 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-
-    // =========================================================
-    // ESCAPE JSON
-    // =========================================================
+    /*
+     * =========================================================
+     * JSON ESCAPE
+     * =========================================================
+     */
 
     private String escapeJson(
             String value
     ) {
 
         if (value == null) {
-
             return "";
         }
 
@@ -390,10 +383,11 @@ public class MainActivity extends Activity {
                 );
     }
 
-
-    // =========================================================
-    // READ STREAM
-    // =========================================================
+    /*
+     * =========================================================
+     * READ SERVER RESPONSE
+     * =========================================================
+     */
 
     private String readStream(
             InputStream inputStream
@@ -401,7 +395,7 @@ public class MainActivity extends Activity {
 
         if (inputStream == null) {
 
-            return "";
+            return "لا يوجد رد من السيرفر";
         }
 
         StringBuilder result =
@@ -430,9 +424,10 @@ public class MainActivity extends Activity {
 
             reader.close();
 
-        } catch (Exception ignored) {
+        } catch (Exception e) {
 
-            return "";
+            return "Failed to read server response: "
+                    + e.getMessage();
         }
 
         return result
@@ -440,18 +435,17 @@ public class MainActivity extends Activity {
                 .trim();
     }
 
-
-    // =========================================================
-    // BACK BUTTON
-    // =========================================================
+    /*
+     * =========================================================
+     * BACK BUTTON
+     * =========================================================
+     */
 
     @Override
     public void onBackPressed() {
 
-        if (
-                webView != null &&
-                webView.canGoBack()
-        ) {
+        if (webView != null
+                && webView.canGoBack()) {
 
             webView.goBack();
 
@@ -459,5 +453,27 @@ public class MainActivity extends Activity {
 
             super.onBackPressed();
         }
+    }
+
+    /*
+     * =========================================================
+     * CLEANUP
+     * =========================================================
+     */
+
+    @Override
+    protected void onDestroy() {
+
+        if (webView != null) {
+
+            webView.stopLoading();
+            webView.setWebChromeClient(null);
+            webView.setWebViewClient(null);
+            webView.destroy();
+
+            webView = null;
+        }
+
+        super.onDestroy();
     }
 }
