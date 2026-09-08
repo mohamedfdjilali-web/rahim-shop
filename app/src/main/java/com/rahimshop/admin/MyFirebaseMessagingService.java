@@ -1,4 +1,3 @@
-```java
 package com.rahimshop.admin;
 
 import android.app.NotificationChannel;
@@ -249,4 +248,3 @@ public class MyFirebaseMessagingService
          */
     }
 }
-```
